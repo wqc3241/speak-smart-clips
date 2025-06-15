@@ -13,6 +13,7 @@ import { ConversationInterface } from "@/components/ConversationInterface";
 import { ProjectManager } from "@/components/ProjectManager";
 import { Youtube, BookOpen, MessageCircle, Save, History } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
@@ -30,37 +31,47 @@ const Index = () => {
     try {
       console.log('Fetching transcript for video ID:', videoId);
       
-      // Using a CORS proxy to fetch transcript data
-      const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch video data');
+      const { data, error } = await supabase.functions.invoke('extract-transcript', {
+        body: { videoId }
+      });
+
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw new Error(error.message || 'Failed to extract transcript');
       }
 
-      const data = await response.json();
-      
-      // This is a simplified approach - in a real app, you'd need a proper transcript extraction service
-      // For now, we'll return a sample script based on the video
-      return "This is where the actual video transcript would appear. The current implementation shows this placeholder because extracting YouTube transcripts requires server-side processing or a specialized API service.";
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to extract transcript');
+      }
+
+      return {
+        transcript: data.transcript,
+        videoTitle: data.videoTitle,
+        captionsAvailable: data.captionsAvailable
+      };
       
     } catch (error) {
       console.error('Error fetching transcript:', error);
-      throw new Error('Could not extract transcript from this video');
+      throw new Error(error.message || 'Could not extract transcript from this video');
     }
   };
 
   const analyzeContent = (script: string) => {
-    // Simple content analysis - in a real app, this would use NLP services
+    // Enhanced content analysis - in a real app, this could use NLP services
     const words = script.toLowerCase().split(/\s+/);
-    const vocabulary = [
-      { word: "transcript", definition: "a written record of speech", difficulty: "intermediate" },
-      { word: "extract", definition: "to take out or remove", difficulty: "beginner" },
-      { word: "implementation", definition: "the process of putting a plan into effect", difficulty: "advanced" }
-    ];
+    const uniqueWords = [...new Set(words)].filter(word => word.length > 3);
+    
+    // Generate vocabulary based on actual content
+    const vocabulary = uniqueWords.slice(0, 10).map(word => ({
+      word: word.replace(/[^\w]/g, ''),
+      definition: `Definition for "${word}" - this would come from a dictionary API`,
+      difficulty: Math.random() > 0.6 ? 'advanced' : Math.random() > 0.3 ? 'intermediate' : 'beginner'
+    }));
     
     const grammar = [
-      { rule: "Present Perfect", example: "would appear", explanation: "Used for actions continuing to present" },
-      { rule: "Conditional", example: "would use", explanation: "Expresses hypothetical situations" }
+      { rule: "Present Perfect", example: "has been", explanation: "Used for actions continuing to present" },
+      { rule: "Past Simple", example: "was/were", explanation: "Used for completed actions in the past" },
+      { rule: "Modal Verbs", example: "can/could/would", explanation: "Express possibility, ability, or permission" }
     ];
     
     return { vocabulary, grammar };
@@ -90,14 +101,14 @@ const Index = () => {
     try {
       console.log('Processing YouTube URL:', youtubeUrl);
       
-      const script = await fetchTranscript(videoId);
-      const { vocabulary, grammar } = analyzeContent(script);
+      const { transcript, videoTitle } = await fetchTranscript(videoId);
+      const { vocabulary, grammar } = analyzeContent(transcript);
       
       const project = {
         id: Date.now(),
-        title: `Video Lesson - ${videoId}`,
+        title: videoTitle || `Video Lesson - ${videoId}`,
         url: youtubeUrl,
-        script: script,
+        script: transcript,
         vocabulary: vocabulary,
         grammar: grammar
       };
