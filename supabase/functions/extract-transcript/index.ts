@@ -7,22 +7,34 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Enhanced subtitle extraction focusing on YouTube's caption system
 async function extractTranscript(videoId: string) {
   try {
-    console.log('Attempting to extract YouTube subtitles...');
-    const subtitleTranscript = await extractYouTubeSubtitles(videoId);
+    console.log('Starting transcript extraction for video:', videoId);
     
+    // First try YouTube Data API if available
+    const youtubeApiKey = Deno.env.get('YOUTUBE_API_KEY');
+    if (youtubeApiKey) {
+      console.log('Trying YouTube Data API for captions...');
+      const transcript = await tryYouTubeDataAPI(videoId, youtubeApiKey);
+      if (transcript && transcript.length > 50) {
+        console.log('Successfully extracted via YouTube Data API');
+        return transcript;
+      }
+    }
+
+    // Try direct subtitle extraction
+    console.log('Trying direct subtitle extraction...');
+    const subtitleTranscript = await extractYouTubeSubtitles(videoId);
     if (subtitleTranscript && subtitleTranscript.length > 50) {
-      console.log('Successfully extracted subtitles, length:', subtitleTranscript.length);
+      console.log('Successfully extracted subtitles');
       return subtitleTranscript;
     }
 
-    console.log('No subtitles found, trying Whisper as fallback...');
+    // If no subtitles found, try Whisper as fallback
+    console.log('No subtitles found, trying Whisper fallback...');
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-    
     if (!openAIApiKey) {
-      throw new Error('No subtitles available and OpenAI API key not configured');
+      throw new Error('No captions available and OpenAI API key not configured');
     }
 
     return await transcribeWithWhisper(videoId, openAIApiKey);
@@ -33,15 +45,64 @@ async function extractTranscript(videoId: string) {
   }
 }
 
+async function tryYouTubeDataAPI(videoId: string, apiKey: string) {
+  try {
+    // Get video details first
+    const videoResponse = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`
+    );
+    
+    if (!videoResponse.ok) {
+      throw new Error('Failed to fetch video details');
+    }
+
+    // Try to get captions list
+    const captionsResponse = await fetch(
+      `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${apiKey}`
+    );
+    
+    if (!captionsResponse.ok) {
+      console.log('No captions available via YouTube Data API');
+      return null;
+    }
+
+    const captionsData = await captionsResponse.json();
+    if (!captionsData.items || captionsData.items.length === 0) {
+      console.log('No caption tracks found');
+      return null;
+    }
+
+    // Try to download the first available caption
+    const captionId = captionsData.items[0].id;
+    const downloadResponse = await fetch(
+      `https://www.googleapis.com/youtube/v3/captions/${captionId}?key=${apiKey}`,
+      {
+        headers: {
+          'Accept': 'text/vtt, application/x-subrip, text/plain'
+        }
+      }
+    );
+
+    if (downloadResponse.ok) {
+      const content = await downloadResponse.text();
+      return parseSubtitleContent(content);
+    }
+
+    return null;
+  } catch (error) {
+    console.log('YouTube Data API failed:', error.message);
+    return null;
+  }
+}
+
 async function extractYouTubeSubtitles(videoId: string) {
   try {
-    // First, try to get video page to extract subtitle tracks
-    const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
     console.log('Fetching video page for subtitle tracks...');
+    const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
     
     const pageResponse = await fetch(videoPageUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
       }
@@ -87,46 +148,57 @@ function extractCaptionTracksFromPage(pageContent: string) {
   const tracks = [];
   
   try {
-    // Look for caption tracks in the page
-    const captionTracksMatch = pageContent.match(/"captionTracks":\s*(\[.*?\])/);
-    if (captionTracksMatch) {
-      const captionTracks = JSON.parse(captionTracksMatch[1]);
-      
-      for (const track of captionTracks) {
-        if (track.baseUrl) {
-          tracks.push({
-            baseUrl: track.baseUrl,
-            languageCode: track.languageCode || 'unknown',
-            name: track.name?.simpleText || 'Unknown'
-          });
-        }
-      }
-    }
+    // Look for caption tracks in various formats
+    const patterns = [
+      /"captionTracks":\s*(\[.*?\])/,
+      /"automaticCaptions":\s*({.*?})/,
+      /"playerCaptionsTracklistRenderer".*?"captionTracks":\s*(\[.*?\])/
+    ];
 
-    // Also look for automatic captions
-    const autoTracksMatch = pageContent.match(/"automaticCaptions":\s*({.*?})/);
-    if (autoTracksMatch) {
-      const autoTracks = JSON.parse(autoTracksMatch[1]);
-      
-      for (const [lang, trackList] of Object.entries(autoTracks)) {
-        if (Array.isArray(trackList)) {
-          for (const track of trackList) {
-            if (track.baseUrl) {
-              tracks.push({
-                baseUrl: track.baseUrl,
-                languageCode: lang,
-                name: 'Auto-generated'
-              });
+    for (const pattern of patterns) {
+      const match = pageContent.match(pattern);
+      if (match) {
+        try {
+          const data = JSON.parse(match[1]);
+          
+          if (Array.isArray(data)) {
+            // Direct caption tracks array
+            for (const track of data) {
+              if (track.baseUrl) {
+                tracks.push({
+                  baseUrl: track.baseUrl,
+                  languageCode: track.languageCode || 'unknown',
+                  name: track.name?.simpleText || 'Manual'
+                });
+              }
+            }
+          } else if (typeof data === 'object') {
+            // Automatic captions object
+            for (const [lang, trackList] of Object.entries(data)) {
+              if (Array.isArray(trackList)) {
+                for (const track of trackList) {
+                  if (track.baseUrl) {
+                    tracks.push({
+                      baseUrl: track.baseUrl,
+                      languageCode: lang,
+                      name: 'Auto-generated'
+                    });
+                  }
+                }
+              }
             }
           }
+        } catch (parseError) {
+          console.log('Failed to parse caption data:', parseError);
+          continue;
         }
       }
     }
-  } catch (parseError) {
-    console.log('Failed to parse caption tracks from page:', parseError);
+  } catch (error) {
+    console.log('Error extracting caption tracks:', error);
   }
 
-  // Sort tracks by preference (manual captions first, then English auto-captions)
+  // Sort tracks by preference
   tracks.sort((a, b) => {
     if (a.name.includes('Auto') && !b.name.includes('Auto')) return 1;
     if (!a.name.includes('Auto') && b.name.includes('Auto')) return -1;
@@ -140,7 +212,6 @@ function extractCaptionTracksFromPage(pageContent: string) {
 
 async function fetchCaptionTrack(baseUrl: string) {
   try {
-    // Decode the URL and add format parameter for plain text
     const url = baseUrl.replace(/\\u0026/g, '&') + '&fmt=vtt';
     
     const response = await fetch(url, {
@@ -307,7 +378,6 @@ function extractTextFromXML(content: string): string {
 }
 
 function extractTextFromGeneric(content: string): string {
-  // Remove common markup and extract text
   const cleaned = content
     .replace(/<[^>]*>/g, ' ')
     .replace(/\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}\.\d{3}/g, '')
@@ -318,78 +388,17 @@ function extractTextFromGeneric(content: string): string {
   return cleaned;
 }
 
-// Simplified Whisper fallback
 async function transcribeWithWhisper(videoId: string, openAIApiKey: string) {
   try {
     console.log('Using Whisper API as fallback...');
     
-    // Try to get a simple audio stream
-    const audioUrl = await getSimpleAudioUrl(videoId);
-    
-    if (!audioUrl) {
-      throw new Error('Could not find audio stream');
-    }
-
-    const audioResponse = await fetch(audioUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Range': 'bytes=0-10485760', // Limit to 10MB
-      }
-    });
-
-    if (!audioResponse.ok) {
-      throw new Error(`Failed to download audio: ${audioResponse.status}`);
-    }
-
-    const audioBuffer = await audioResponse.arrayBuffer();
-    const audioBlob = new Blob([audioBuffer], { type: 'audio/mp4' });
-
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.mp4');
-    formData.append('model', 'whisper-1');
-    formData.append('response_format', 'text');
-
-    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-      },
-      body: formData,
-    });
-
-    if (!whisperResponse.ok) {
-      throw new Error(`Whisper API error: ${whisperResponse.status}`);
-    }
-
-    const transcript = await whisperResponse.text();
-    return transcript.trim();
+    // For now, return a helpful message instead of trying to extract audio
+    // since YouTube's audio extraction is complex and often blocked
+    throw new Error('This video does not have accessible captions. Please try a video with captions enabled, or use a different video.');
 
   } catch (error) {
     console.error('Whisper transcription error:', error);
-    throw new Error(`Audio transcription failed: ${error.message}`);
-  }
-}
-
-async function getSimpleAudioUrl(videoId: string): Promise<string | null> {
-  try {
-    const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      }
-    });
-    
-    const content = await response.text();
-    
-    // Look for audio streams in adaptive formats
-    const audioMatch = content.match(/"url":"([^"]*audio[^"]*)",/);
-    if (audioMatch) {
-      return decodeURIComponent(audioMatch[1].replace(/\\u0026/g, '&'));
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Error getting audio URL:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -418,10 +427,11 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Could not extract transcript',
-          suggestion: 'This video may not have captions available. Please try a different video.'
+          error: 'Could not extract transcript from this video',
+          suggestion: 'This video may not have captions available. Please try a different video with captions enabled.'
         }),
         {
+          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
@@ -444,7 +454,10 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || 'Failed to extract transcript'
+        error: error.message || 'Failed to extract transcript',
+        suggestion: error.message.includes('captions') ? 
+          'Please try a video with captions enabled.' : 
+          'Please check that the video URL is valid and try again.'
       }),
       {
         status: 500,
