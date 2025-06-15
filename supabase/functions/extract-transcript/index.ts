@@ -7,69 +7,88 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Simple transcript extraction function
+// Enhanced transcript extraction with multiple fallback methods
 async function extractTranscript(videoId: string) {
   try {
-    // Try to get transcript from YouTube's timedtext API
-    const transcriptUrl = `https://www.youtube.com/api/timedtext?lang=en&v=${videoId}&fmt=json3`;
+    // Method 1: Try direct timedtext API with different formats
+    const formats = ['json3', 'srv3', 'srv2', 'srv1'];
+    const languages = ['en', 'ja', 'es', 'fr', 'de', 'it', 'auto'];
     
-    console.log('Attempting to fetch transcript from:', transcriptUrl);
-    
-    const response = await fetch(transcriptUrl);
-    
-    if (!response.ok) {
-      console.log('English transcript failed, trying alternative languages');
-      
-      // Try alternative languages if English fails
-      const altLanguages = ['ja', 'es', 'fr', 'de', 'it', 'auto'];
-      
-      for (const lang of altLanguages) {
-        const altUrl = `https://www.youtube.com/api/timedtext?lang=${lang}&v=${videoId}&fmt=json3`;
-        console.log('Trying alternative language:', lang);
+    for (const format of formats) {
+      for (const lang of languages) {
+        const transcriptUrl = `https://www.youtube.com/api/timedtext?lang=${lang}&v=${videoId}&fmt=${format}`;
         
-        const altResponse = await fetch(altUrl);
-        if (altResponse.ok) {
-          const responseText = await altResponse.text();
-          console.log('Response text length:', responseText.length);
+        console.log(`Trying format: ${format}, language: ${lang}`);
+        
+        try {
+          const response = await fetch(transcriptUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+          });
           
-          if (responseText && responseText.trim().length > 0) {
-            try {
-              const data = JSON.parse(responseText);
-              if (data.events && data.events.length > 0) {
-                return extractTextFromTimedText(data);
+          if (response.ok) {
+            const responseText = await response.text();
+            console.log(`Response length for ${format}/${lang}:`, responseText.length);
+            
+            if (responseText && responseText.trim().length > 10) {
+              // Try to parse based on format
+              if (format === 'json3') {
+                try {
+                  const data = JSON.parse(responseText);
+                  if (data.events && data.events.length > 0) {
+                    return extractTextFromTimedText(data);
+                  }
+                } catch (parseError) {
+                  console.log('JSON parse failed, trying XML parsing');
+                }
               }
-            } catch (parseError) {
-              console.log('JSON parse error for language', lang, ':', parseError);
-              continue;
+              
+              // Fallback: extract text from XML formats
+              const xmlText = extractTextFromXML(responseText);
+              if (xmlText && xmlText.length > 50) {
+                return xmlText;
+              }
+            }
+          }
+        } catch (error) {
+          console.log(`Error with ${format}/${lang}:`, error.message);
+          continue;
+        }
+      }
+    }
+    
+    // Method 2: Try getting caption tracks list first
+    try {
+      const captionListUrl = `https://www.youtube.com/api/timedtext?type=list&v=${videoId}`;
+      const listResponse = await fetch(captionListUrl);
+      
+      if (listResponse.ok) {
+        const listText = await listResponse.text();
+        console.log('Caption tracks available:', listText.substring(0, 200));
+        
+        // Parse available tracks and try the first available one
+        const trackMatch = listText.match(/lang_code="([^"]+)"/);
+        if (trackMatch) {
+          const availableLang = trackMatch[1];
+          console.log('Found available language:', availableLang);
+          
+          const trackUrl = `https://www.youtube.com/api/timedtext?lang=${availableLang}&v=${videoId}&fmt=srv3`;
+          const trackResponse = await fetch(trackUrl);
+          
+          if (trackResponse.ok) {
+            const trackText = await trackResponse.text();
+            if (trackText && trackText.length > 10) {
+              return extractTextFromXML(trackText);
             }
           }
         }
       }
-      
-      throw new Error('No transcript available in supported languages');
+    } catch (error) {
+      console.log('Caption list method failed:', error.message);
     }
     
-    const responseText = await response.text();
-    console.log('Response text length:', responseText.length);
-    
-    if (!responseText || responseText.trim().length === 0) {
-      throw new Error('Empty response from YouTube API');
-    }
-    
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('JSON parse error:', parseError);
-      console.log('Raw response:', responseText.substring(0, 500));
-      throw new Error('Invalid JSON response from YouTube API');
-    }
-    
-    if (!data.events || data.events.length === 0) {
-      throw new Error('No transcript content found');
-    }
-    
-    return extractTextFromTimedText(data);
+    throw new Error('No accessible transcript found for this video');
     
   } catch (error) {
     console.error('Transcript extraction error:', error);
@@ -97,6 +116,48 @@ function extractTextFromTimedText(data: any): string {
   }
   
   return transcript.trim();
+}
+
+function extractTextFromXML(xmlText: string): string {
+  try {
+    // Extract text from XML caption formats
+    const textMatches = xmlText.match(/<text[^>]*>([^<]+)<\/text>/g);
+    if (textMatches) {
+      let transcript = '';
+      for (const match of textMatches) {
+        const textContent = match.replace(/<[^>]*>/g, '').trim();
+        if (textContent) {
+          // Decode HTML entities
+          const decoded = textContent
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+          transcript += decoded + ' ';
+        }
+      }
+      return transcript.trim();
+    }
+    
+    // Alternative: try to extract any text content between tags
+    const simpleTextMatches = xmlText.match(/>([^<]+)</g);
+    if (simpleTextMatches) {
+      let transcript = '';
+      for (const match of simpleTextMatches) {
+        const text = match.slice(1, -1).trim();
+        if (text && text.length > 2 && !text.includes('=')) {
+          transcript += text + ' ';
+        }
+      }
+      return transcript.trim();
+    }
+    
+    return '';
+  } catch (error) {
+    console.error('XML parsing error:', error);
+    return '';
+  }
 }
 
 async function getVideoTitle(videoId: string, apiKey: string): Promise<string> {
@@ -138,7 +199,7 @@ serve(async (req) => {
     const videoTitle = await getVideoTitle(videoId, youtubeApiKey);
     console.log('Processing video:', videoTitle);
 
-    // Extract transcript using timedtext API
+    // Extract transcript using enhanced method
     const transcript = await extractTranscript(videoId);
     
     if (!transcript || transcript.length < 10) {
@@ -146,7 +207,7 @@ serve(async (req) => {
         JSON.stringify({
           success: false,
           error: 'No transcript available or transcript too short',
-          suggestion: 'This video may not have captions available or may be age-restricted.'
+          suggestion: 'This video may not have captions available, may be age-restricted, or captions may be disabled by the creator.'
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
