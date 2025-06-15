@@ -11,7 +11,7 @@ import { ScriptDisplay } from "@/components/ScriptDisplay";
 import { VocabularyPanel } from "@/components/VocabularyPanel";
 import { ConversationInterface } from "@/components/ConversationInterface";
 import { ProjectManager } from "@/components/ProjectManager";
-import { Youtube, BookOpen, MessageCircle, Save, History } from 'lucide-react';
+import { Youtube, BookOpen, MessageCircle, Save, History, TestTube } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -20,6 +20,7 @@ const Index = () => {
   const [currentProject, setCurrentProject] = useState(null);
   const [activeTab, setActiveTab] = useState('input');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
   const { toast } = useToast();
 
   const extractVideoId = (url: string) => {
@@ -75,6 +76,51 @@ const Index = () => {
     ];
     
     return { vocabulary, grammar };
+  };
+
+  const testAPIs = async () => {
+    setIsTesting(true);
+    try {
+      console.log('Testing APIs...');
+      
+      const { data, error } = await supabase.functions.invoke('test-apis', {
+        body: { testType: 'both' }
+      });
+
+      if (error) {
+        console.error('API test error:', error);
+        throw new Error(error.message || 'Failed to test APIs');
+      }
+
+      console.log('API test results:', data);
+      
+      if (data.success) {
+        toast({
+          title: "✅ All APIs Working!",
+          description: `YouTube: ${data.youtube.success ? '✅' : '❌'} | OpenAI: ${data.openai.success ? '✅' : '❌'}`,
+        });
+      } else {
+        const issues = [];
+        if (!data.youtube.success) issues.push(`YouTube: ${data.youtube.error}`);
+        if (!data.openai.success) issues.push(`OpenAI: ${data.openai.error}`);
+        
+        toast({
+          title: "❌ API Issues Found",
+          description: issues.join(' | '),
+          variant: "destructive",
+        });
+      }
+      
+    } catch (error) {
+      console.error('API testing failed:', error);
+      toast({
+        title: "Testing failed",
+        description: error.message || "Could not test APIs",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   const handleUrlSubmit = async () => {
@@ -183,14 +229,26 @@ const Index = () => {
                   onChange={(e) => setYoutubeUrl(e.target.value)}
                   className="text-lg"
                 />
-                <Button 
-                  onClick={handleUrlSubmit} 
-                  className="w-full" 
-                  size="lg"
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? 'Processing Video...' : 'Process Video'}
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleUrlSubmit} 
+                    className="flex-1" 
+                    size="lg"
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? 'Processing Video...' : 'Process Video'}
+                  </Button>
+                  <Button 
+                    onClick={testAPIs} 
+                    variant="outline"
+                    size="lg"
+                    disabled={isTesting}
+                    className="flex items-center gap-2"
+                  >
+                    <TestTube className="w-4 h-4" />
+                    {isTesting ? 'Testing...' : 'Test APIs'}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
