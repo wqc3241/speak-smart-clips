@@ -18,8 +18,10 @@ async function extractTranscript(videoId: string) {
     const response = await fetch(transcriptUrl);
     
     if (!response.ok) {
+      console.log('English transcript failed, trying alternative languages');
+      
       // Try alternative languages if English fails
-      const altLanguages = ['ja', 'es', 'fr', 'de', 'it'];
+      const altLanguages = ['ja', 'es', 'fr', 'de', 'it', 'auto'];
       
       for (const lang of altLanguages) {
         const altUrl = `https://www.youtube.com/api/timedtext?lang=${lang}&v=${videoId}&fmt=json3`;
@@ -27,9 +29,19 @@ async function extractTranscript(videoId: string) {
         
         const altResponse = await fetch(altUrl);
         if (altResponse.ok) {
-          const data = await altResponse.json();
-          if (data.events && data.events.length > 0) {
-            return extractTextFromTimedText(data);
+          const responseText = await altResponse.text();
+          console.log('Response text length:', responseText.length);
+          
+          if (responseText && responseText.trim().length > 0) {
+            try {
+              const data = JSON.parse(responseText);
+              if (data.events && data.events.length > 0) {
+                return extractTextFromTimedText(data);
+              }
+            } catch (parseError) {
+              console.log('JSON parse error for language', lang, ':', parseError);
+              continue;
+            }
           }
         }
       }
@@ -37,7 +49,21 @@ async function extractTranscript(videoId: string) {
       throw new Error('No transcript available in supported languages');
     }
     
-    const data = await response.json();
+    const responseText = await response.text();
+    console.log('Response text length:', responseText.length);
+    
+    if (!responseText || responseText.trim().length === 0) {
+      throw new Error('Empty response from YouTube API');
+    }
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      console.log('Raw response:', responseText.substring(0, 500));
+      throw new Error('Invalid JSON response from YouTube API');
+    }
     
     if (!data.events || data.events.length === 0) {
       throw new Error('No transcript content found');
@@ -60,7 +86,11 @@ function extractTextFromTimedText(data: any): string {
     if (event.segs) {
       for (const seg of event.segs) {
         if (seg.utf8) {
-          transcript += seg.utf8 + ' ';
+          // Clean up the text and add proper spacing
+          const text = seg.utf8.replace(/\n/g, ' ').trim();
+          if (text) {
+            transcript += text + ' ';
+          }
         }
       }
     }
@@ -116,7 +146,7 @@ serve(async (req) => {
         JSON.stringify({
           success: false,
           error: 'No transcript available or transcript too short',
-          suggestion: 'This video may not have captions available or captions are disabled.'
+          suggestion: 'This video may not have captions available or may be age-restricted.'
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
