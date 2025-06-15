@@ -1,53 +1,95 @@
-
 import { CaptionTrack, USER_AGENT } from './types.ts';
 
 export async function tryYouTubeDataAPI(videoId: string, apiKey: string): Promise<string | null> {
   try {
+    console.log('YouTube Data API: Starting with API key present:', !!apiKey);
+    
     // Get video details first
-    const videoResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`
-    );
+    const videoUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
+    console.log('YouTube Data API: Fetching video details...');
+    
+    const videoResponse = await fetch(videoUrl);
+    console.log('YouTube Data API: Video response status:', videoResponse.status);
     
     if (!videoResponse.ok) {
-      throw new Error('Failed to fetch video details');
+      const errorText = await videoResponse.text();
+      console.log('YouTube Data API: Video request failed:', errorText);
+      throw new Error(`Failed to fetch video details: ${videoResponse.status} - ${errorText}`);
     }
 
+    const videoData = await videoResponse.json();
+    console.log('YouTube Data API: Video data received:', {
+      itemsCount: videoData.items?.length || 0,
+      videoTitle: videoData.items?.[0]?.snippet?.title || 'Unknown'
+    });
+
     // Try to get captions list
-    const captionsResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${apiKey}`
-    );
+    const captionsUrl = `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${apiKey}`;
+    console.log('YouTube Data API: Fetching captions list...');
+    
+    const captionsResponse = await fetch(captionsUrl);
+    console.log('YouTube Data API: Captions response status:', captionsResponse.status);
     
     if (!captionsResponse.ok) {
-      console.log('No captions available via YouTube Data API');
+      const errorText = await captionsResponse.text();
+      console.log('YouTube Data API: Captions request failed:', errorText);
+      console.log('YouTube Data API: No captions available via API');
       return null;
     }
 
     const captionsData = await captionsResponse.json();
+    console.log('YouTube Data API: Captions data received:', {
+      itemsCount: captionsData.items?.length || 0,
+      items: captionsData.items?.map(item => ({
+        id: item.id,
+        language: item.snippet?.language,
+        name: item.snippet?.name
+      })) || []
+    });
+    
     if (!captionsData.items || captionsData.items.length === 0) {
-      console.log('No caption tracks found');
+      console.log('YouTube Data API: No caption tracks found in response');
       return null;
     }
 
     // Try to download the first available caption
     const captionId = captionsData.items[0].id;
-    const downloadResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/captions/${captionId}?key=${apiKey}`,
-      {
-        headers: {
-          'Accept': 'text/vtt, application/x-subrip, text/plain'
-        }
+    const downloadUrl = `https://www.googleapis.com/youtube/v3/captions/${captionId}?key=${apiKey}`;
+    console.log('YouTube Data API: Attempting to download caption:', captionId);
+    
+    const downloadResponse = await fetch(downloadUrl, {
+      headers: {
+        'Accept': 'text/vtt, application/x-subrip, text/plain'
       }
-    );
+    });
+
+    console.log('YouTube Data API: Caption download response status:', downloadResponse.status);
 
     if (downloadResponse.ok) {
-      const { parseSubtitleContent } = await import('./subtitle-parser.ts');
       const content = await downloadResponse.text();
-      return parseSubtitleContent(content);
+      console.log('YouTube Data API: Caption content received, length:', content.length);
+      
+      const { parseSubtitleContent } = await import('./subtitle-parser.ts');
+      const transcript = parseSubtitleContent(content);
+      
+      if (transcript && transcript.length > 50) {
+        console.log('YouTube Data API: Successfully parsed transcript, length:', transcript.length);
+        return transcript;
+      } else {
+        console.log('YouTube Data API: Parsed transcript too short or empty');
+      }
+    } else {
+      const errorText = await downloadResponse.text();
+      console.log('YouTube Data API: Caption download failed:', errorText);
     }
 
     return null;
   } catch (error) {
-    console.log('YouTube Data API failed:', error.message);
+    console.error('YouTube Data API: Detailed error:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack?.substring(0, 500) // Truncate stack trace
+    });
     return null;
   }
 }
