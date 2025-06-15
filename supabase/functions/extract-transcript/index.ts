@@ -26,7 +26,7 @@ async function extractTranscript(videoId: string) {
       return altTranscript;
     }
 
-    // Method 3: Use Whisper API for audio transcription (if OpenAI key is available)
+    // Method 3: Use Whisper API for audio transcription
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     
     if (!openAIApiKey) {
@@ -185,11 +185,12 @@ async function transcribeAudioWithWhisper(videoId: string, openAIApiKey: string)
     
     console.log('Audio downloaded successfully, size:', audioBuffer.byteLength, 'bytes');
     
-    const audioBlob = new Blob([audioBuffer], { type: 'audio/mp4' });
+    // Create proper audio file with correct MIME type
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/mp3' });
 
     // Prepare form data for Whisper API
     const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.mp4');
+    formData.append('file', audioBlob, 'audio.mp3');
     formData.append('model', 'whisper-1');
     formData.append('response_format', 'text');
     formData.append('language', 'en'); // You can make this dynamic based on video
@@ -388,22 +389,8 @@ function extractTextFromXML(xmlText: string): string {
   }
 }
 
-async function getVideoTitle(videoId: string, apiKey: string): Promise<string> {
-  try {
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`
-    );
-    
-    if (response.ok) {
-      const data = await response.json();
-      if (data.items && data.items.length > 0) {
-        return data.items[0].snippet.title;
-      }
-    }
-  } catch (error) {
-    console.error('Error fetching video title:', error);
-  }
-  
+function getVideoTitle(videoId: string): string {
+  // Since we're not using YouTube Data API, return a simple title
   return `Video ${videoId}`;
 }
 
@@ -415,16 +402,15 @@ serve(async (req) => {
 
   try {
     const { videoId } = await req.json();
-    const youtubeApiKey = Deno.env.get('YOUTUBE_API_KEY');
 
-    if (!youtubeApiKey) {
-      throw new Error('YouTube API key not configured');
+    if (!videoId) {
+      throw new Error('Video ID is required');
     }
 
     console.log('Extracting transcript for video ID:', videoId);
 
-    // Get video title
-    const videoTitle = await getVideoTitle(videoId, youtubeApiKey);
+    // Get video title (simple version without API)
+    const videoTitle = getVideoTitle(videoId);
     console.log('Processing video:', videoTitle);
 
     // Extract transcript using enhanced method
