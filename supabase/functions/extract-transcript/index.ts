@@ -82,7 +82,7 @@ serve(async (req) => {
       videoTitle,
       transcript,
       captionsAvailable: true,
-      transcriptionMethod: transcript.includes('Whisper') ? 'whisper' : 'captions'
+      transcriptionMethod: transcript.includes('transcribed') ? 'whisper' : 'captions'
     };
 
     return new Response(JSON.stringify(result), {

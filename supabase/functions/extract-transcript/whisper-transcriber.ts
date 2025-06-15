@@ -5,10 +5,10 @@ export async function transcribeWithWhisper(videoId: string, openAIApiKey: strin
   try {
     console.log('Starting Whisper transcription for video:', videoId);
     
-    // Get audio stream URL
+    // Get audio stream URL using multiple methods
     const audioUrl = await getYouTubeAudioUrl(videoId);
     
-    // Download audio
+    // Download audio with better error handling
     const audioBuffer = await downloadAudioAsBuffer(audioUrl);
     
     // Create form data for Whisper API
@@ -16,7 +16,7 @@ export async function transcribeWithWhisper(videoId: string, openAIApiKey: strin
     const audioBlob = new Blob([audioBuffer], { type: 'audio/mp4' });
     formData.append('file', audioBlob, `audio_${videoId}.m4a`);
     formData.append('model', 'whisper-1');
-    formData.append('language', 'en'); // You can make this configurable
+    formData.append('language', 'en');
     formData.append('response_format', 'text');
 
     console.log('Sending audio to Whisper API...');
@@ -55,13 +55,17 @@ async function getYouTubeAudioUrl(videoId: string): Promise<string> {
   try {
     console.log('Fetching YouTube video info for audio extraction...');
     
-    // Get video page to extract audio stream URLs
+    // Try multiple methods to get video page content
     const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const pageResponse = await fetch(videoPageUrl, {
       headers: {
         'User-Agent': USER_AGENT,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
       }
     });
 
@@ -70,13 +74,15 @@ async function getYouTubeAudioUrl(videoId: string): Promise<string> {
     }
 
     const pageContent = await pageResponse.text();
+    console.log('Page content fetched, length:', pageContent.length);
     
-    // Try multiple patterns for finding player response
+    // Enhanced patterns for finding player response
     const patterns = [
       /var ytInitialPlayerResponse = ({.*?});/,
       /window\["ytInitialPlayerResponse"\] = ({.*?});/,
       /"ytInitialPlayerResponse":({.*?}),"ytInitialData"/,
-      /ytInitialPlayerResponse":\s*({.*?}),\s*"ytInitialData"/
+      /ytInitialPlayerResponse":\s*({.*?}),\s*"ytInitialData"/,
+      /ytInitialPlayerResponse['"]?\s*[:=]\s*({.*?})(?=[;,\]}])/
     ];
 
     let playerResponse = null;
@@ -85,10 +91,11 @@ async function getYouTubeAudioUrl(videoId: string): Promise<string> {
       const match = pageContent.match(pattern);
       if (match) {
         try {
-          playerResponse = JSON.parse(match[1]);
-          console.log('Found player response with pattern:', pattern.source);
+          const jsonString = match[1];
+          playerResponse = JSON.parse(jsonString);
+          console.log('Found player response with pattern:', pattern.source.substring(0, 50) + '...');
           break;
-        } catch (e) {
+        } catch (parseError) {
           console.log('Failed to parse player response, trying next pattern');
           continue;
         }
@@ -96,33 +103,82 @@ async function getYouTubeAudioUrl(videoId: string): Promise<string> {
     }
 
     if (!playerResponse) {
-      throw new Error('Could not find player response in video page');
+      // Fallback: try to extract from any JSON-like structure
+      const fallbackPattern = /"streamingData":\s*({[^}]*"adaptiveFormats"[^}]*})/;
+      const fallbackMatch = pageContent.match(fallbackPattern);
+      if (fallbackMatch) {
+        try {
+          const streamingData = JSON.parse(fallbackMatch[1]);
+          playerResponse = { streamingData };
+          console.log('Found streaming data using fallback pattern');
+        } catch (e) {
+          console.log('Fallback pattern also failed');
+        }
+      }
+    }
+
+    if (!playerResponse || !playerResponse.streamingData) {
+      throw new Error('Could not find streaming data in video page');
     }
     
-    if (!playerResponse.streamingData || !playerResponse.streamingData.adaptiveFormats) {
-      throw new Error('No streaming data found in video');
+    const { streamingData } = playerResponse;
+    
+    if (!streamingData.adaptiveFormats && !streamingData.formats) {
+      throw new Error('No adaptive formats or formats found in streaming data');
     }
 
-    // Find audio-only stream (usually format 140 - m4a audio)
-    const audioFormats = playerResponse.streamingData.adaptiveFormats.filter(
-      (format: any) => format.mimeType && format.mimeType.includes('audio')
-    );
+    // Combine all available formats
+    const allFormats = [
+      ...(streamingData.adaptiveFormats || []),
+      ...(streamingData.formats || [])
+    ];
+
+    // Filter for audio-only streams first, then any stream with audio
+    const audioFormats = allFormats.filter((format: any) => {
+      const mimeType = format.mimeType || '';
+      const hasAudio = mimeType.includes('audio') || 
+                      (format.audioQuality && !mimeType.includes('video'));
+      return hasAudio && format.url;
+    });
 
     if (audioFormats.length === 0) {
-      throw new Error('No audio streams found');
+      console.log('No audio-only formats found, trying any format with audio');
+      const anyAudioFormats = allFormats.filter((format: any) => 
+        format.url && (format.audioQuality || format.mimeType?.includes('audio'))
+      );
+      
+      if (anyAudioFormats.length === 0) {
+        throw new Error('No formats with audio found');
+      }
+      
+      audioFormats.push(...anyAudioFormats);
     }
 
-    // Prefer m4a format, fallback to any audio format
-    const preferredFormat = audioFormats.find((format: any) => 
-      format.mimeType.includes('mp4') || format.mimeType.includes('m4a')
-    ) || audioFormats[0];
+    // Prefer formats in this order: m4a, mp4, webm
+    const formatPriority = ['mp4', 'm4a', 'webm'];
+    const sortedFormats = audioFormats.sort((a: any, b: any) => {
+      const aType = a.mimeType || '';
+      const bType = b.mimeType || '';
+      
+      for (const type of formatPriority) {
+        if (aType.includes(type) && !bType.includes(type)) return -1;
+        if (!aType.includes(type) && bType.includes(type)) return 1;
+      }
+      
+      // Prefer lower quality for faster download
+      const aQuality = parseInt(a.audioQuality?.replace('AUDIO_QUALITY_', '') || '999');
+      const bQuality = parseInt(b.audioQuality?.replace('AUDIO_QUALITY_', '') || '999');
+      return aQuality - bQuality;
+    });
 
-    if (!preferredFormat.url) {
-      throw new Error('No valid audio URL found');
-    }
+    const selectedFormat = sortedFormats[0];
+    console.log('Selected audio format:', {
+      mimeType: selectedFormat.mimeType,
+      audioQuality: selectedFormat.audioQuality,
+      contentLength: selectedFormat.contentLength
+    });
 
-    console.log('Found audio stream:', preferredFormat.mimeType);
-    return preferredFormat.url;
+    return selectedFormat.url;
 
   } catch (error) {
     console.error('Error extracting audio URL:', error);
@@ -134,19 +190,40 @@ async function downloadAudioAsBuffer(audioUrl: string): Promise<ArrayBuffer> {
   try {
     console.log('Downloading audio stream...');
     
+    // First, get the content length to determine how much to download
+    const headResponse = await fetch(audioUrl, {
+      method: 'HEAD',
+      headers: {
+        'User-Agent': USER_AGENT,
+      }
+    });
+
+    const contentLength = parseInt(headResponse.headers.get('content-length') || '0');
+    console.log('Audio content length:', contentLength);
+
+    // Download only first part of the audio to reduce processing time and memory usage
+    // Whisper can work with partial audio for transcription
+    const maxSize = 15 * 1024 * 1024; // 15MB limit
+    const downloadSize = contentLength > 0 ? Math.min(contentLength, maxSize) : maxSize;
+    
     const response = await fetch(audioUrl, {
       headers: {
         'User-Agent': USER_AGENT,
-        'Range': 'bytes=0-10485760', // Limit to ~10MB to avoid memory issues
+        'Range': `bytes=0-${downloadSize - 1}`,
+        'Accept': 'audio/mp4,audio/mpeg,audio/*,*/*',
       }
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to download audio: ${response.status}`);
+      throw new Error(`Failed to download audio: ${response.status} ${response.statusText}`);
     }
 
     const audioBuffer = await response.arrayBuffer();
     console.log(`Downloaded audio buffer: ${audioBuffer.byteLength} bytes`);
+    
+    if (audioBuffer.byteLength < 1000) {
+      throw new Error('Downloaded audio file is too small, likely corrupted');
+    }
     
     return audioBuffer;
 
