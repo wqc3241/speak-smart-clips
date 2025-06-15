@@ -7,6 +7,87 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Simple transcript extraction function
+async function extractTranscript(videoId: string) {
+  try {
+    // Try to get transcript from YouTube's timedtext API
+    const transcriptUrl = `https://www.youtube.com/api/timedtext?lang=en&v=${videoId}&fmt=json3`;
+    
+    console.log('Attempting to fetch transcript from:', transcriptUrl);
+    
+    const response = await fetch(transcriptUrl);
+    
+    if (!response.ok) {
+      // Try alternative languages if English fails
+      const altLanguages = ['ja', 'es', 'fr', 'de', 'it'];
+      
+      for (const lang of altLanguages) {
+        const altUrl = `https://www.youtube.com/api/timedtext?lang=${lang}&v=${videoId}&fmt=json3`;
+        console.log('Trying alternative language:', lang);
+        
+        const altResponse = await fetch(altUrl);
+        if (altResponse.ok) {
+          const data = await altResponse.json();
+          if (data.events && data.events.length > 0) {
+            return extractTextFromTimedText(data);
+          }
+        }
+      }
+      
+      throw new Error('No transcript available in supported languages');
+    }
+    
+    const data = await response.json();
+    
+    if (!data.events || data.events.length === 0) {
+      throw new Error('No transcript content found');
+    }
+    
+    return extractTextFromTimedText(data);
+    
+  } catch (error) {
+    console.error('Transcript extraction error:', error);
+    throw error;
+  }
+}
+
+function extractTextFromTimedText(data: any): string {
+  if (!data.events) return '';
+  
+  let transcript = '';
+  
+  for (const event of data.events) {
+    if (event.segs) {
+      for (const seg of event.segs) {
+        if (seg.utf8) {
+          transcript += seg.utf8 + ' ';
+        }
+      }
+    }
+  }
+  
+  return transcript.trim();
+}
+
+async function getVideoTitle(videoId: string, apiKey: string): Promise<string> {
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.items && data.items.length > 0) {
+        return data.items[0].snippet.title;
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching video title:', error);
+  }
+  
+  return `Video ${videoId}`;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -23,42 +104,19 @@ serve(async (req) => {
 
     console.log('Extracting transcript for video ID:', videoId);
 
-    // First, get video details to check if captions are available
-    const videoResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${youtubeApiKey}`
-    );
-
-    if (!videoResponse.ok) {
-      throw new Error('Failed to fetch video details');
-    }
-
-    const videoData = await videoResponse.json();
-    
-    if (!videoData.items || videoData.items.length === 0) {
-      throw new Error('Video not found');
-    }
-
-    const videoTitle = videoData.items[0].snippet.title;
+    // Get video title
+    const videoTitle = await getVideoTitle(videoId, youtubeApiKey);
     console.log('Processing video:', videoTitle);
 
-    // Get available captions
-    const captionsResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${youtubeApiKey}`
-    );
-
-    if (!captionsResponse.ok) {
-      throw new Error('Failed to fetch captions list');
-    }
-
-    const captionsData = await captionsResponse.json();
+    // Extract transcript using timedtext API
+    const transcript = await extractTranscript(videoId);
     
-    if (!captionsData.items || captionsData.items.length === 0) {
-      // If no captions available, return a helpful message
+    if (!transcript || transcript.length < 10) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'No captions available for this video',
-          suggestion: 'This video does not have auto-generated or manual captions available.'
+          error: 'No transcript available or transcript too short',
+          suggestion: 'This video may not have captions available or captions are disabled.'
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -66,72 +124,13 @@ serve(async (req) => {
       );
     }
 
-    // Find the best caption track (prefer auto-generated English)
-    let selectedCaption = captionsData.items.find((caption: any) => 
-      caption.snippet.language === 'en' && caption.snippet.trackKind === 'asr'
-    );
-
-    // If no auto-generated English, try any English caption
-    if (!selectedCaption) {
-      selectedCaption = captionsData.items.find((caption: any) => 
-        caption.snippet.language === 'en'
-      );
-    }
-
-    // If no English, use the first available caption
-    if (!selectedCaption) {
-      selectedCaption = captionsData.items[0];
-    }
-
-    console.log('Using caption track:', selectedCaption.snippet.language, selectedCaption.snippet.name);
-
-    // Download the caption content
-    const captionResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/captions/${selectedCaption.id}?key=${youtubeApiKey}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${youtubeApiKey}`,
-        }
-      }
-    );
-
-    if (!captionResponse.ok) {
-      // If we can't download captions directly (common with API restrictions),
-      // we'll provide a structured response with available caption info
-      const availableCaptions = captionsData.items.map((caption: any) => ({
-        language: caption.snippet.language,
-        name: caption.snippet.name,
-        trackKind: caption.snippet.trackKind
-      }));
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          videoTitle,
-          transcript: `Transcript extraction for "${videoTitle}" - Captions are available in: ${availableCaptions.map(c => c.language).join(', ')}. 
-
-Due to YouTube API restrictions, automatic caption download requires additional authentication. However, this video has captions available and can be processed for language learning.
-
-Available caption tracks:
-${availableCaptions.map(c => `• ${c.language} (${c.trackKind === 'asr' ? 'Auto-generated' : 'Manual'})`).join('\n')}
-
-For a complete language learning experience, you can manually copy the transcript from YouTube's caption feature or use this as a starting point for vocabulary and grammar analysis.`,
-          captionsAvailable: true,
-          availableCaptions
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    const captionText = await captionResponse.text();
+    console.log('Successfully extracted transcript, length:', transcript.length);
 
     return new Response(
       JSON.stringify({
         success: true,
         videoTitle,
-        transcript: captionText,
+        transcript,
         captionsAvailable: true
       }),
       {
