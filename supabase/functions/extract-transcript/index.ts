@@ -7,92 +7,167 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Enhanced transcript extraction with multiple fallback methods
+// Enhanced transcript extraction with audio analysis fallback
 async function extractTranscript(videoId: string) {
   try {
-    // Method 1: Try direct timedtext API with different formats
-    const formats = ['json3', 'srv3', 'srv2', 'srv1'];
-    const languages = ['en', 'ja', 'es', 'fr', 'de', 'it', 'auto'];
-    
-    for (const format of formats) {
-      for (const lang of languages) {
-        const transcriptUrl = `https://www.youtube.com/api/timedtext?lang=${lang}&v=${videoId}&fmt=${format}`;
-        
-        console.log(`Trying format: ${format}, language: ${lang}`);
-        
-        try {
-          const response = await fetch(transcriptUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-          });
-          
-          if (response.ok) {
-            const responseText = await response.text();
-            console.log(`Response length for ${format}/${lang}:`, responseText.length);
-            
-            if (responseText && responseText.trim().length > 10) {
-              // Try to parse based on format
-              if (format === 'json3') {
-                try {
-                  const data = JSON.parse(responseText);
-                  if (data.events && data.events.length > 0) {
-                    return extractTextFromTimedText(data);
-                  }
-                } catch (parseError) {
-                  console.log('JSON parse failed, trying XML parsing');
-                }
-              }
-              
-              // Fallback: extract text from XML formats
-              const xmlText = extractTextFromXML(responseText);
-              if (xmlText && xmlText.length > 50) {
-                return xmlText;
-              }
-            }
-          }
-        } catch (error) {
-          console.log(`Error with ${format}/${lang}:`, error.message);
-          continue;
-        }
-      }
+    // Method 1: Try existing caption methods first
+    const existingTranscript = await tryExistingCaptions(videoId);
+    if (existingTranscript) {
+      console.log('Found existing captions');
+      return existingTranscript;
     }
-    
-    // Method 2: Try getting caption tracks list first
-    try {
-      const captionListUrl = `https://www.youtube.com/api/timedtext?type=list&v=${videoId}`;
-      const listResponse = await fetch(captionListUrl);
-      
-      if (listResponse.ok) {
-        const listText = await listResponse.text();
-        console.log('Caption tracks available:', listText.substring(0, 200));
-        
-        // Parse available tracks and try the first available one
-        const trackMatch = listText.match(/lang_code="([^"]+)"/);
-        if (trackMatch) {
-          const availableLang = trackMatch[1];
-          console.log('Found available language:', availableLang);
-          
-          const trackUrl = `https://www.youtube.com/api/timedtext?lang=${availableLang}&v=${videoId}&fmt=srv3`;
-          const trackResponse = await fetch(trackUrl);
-          
-          if (trackResponse.ok) {
-            const trackText = await trackResponse.text();
-            if (trackText && trackText.length > 10) {
-              return extractTextFromXML(trackText);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.log('Caption list method failed:', error.message);
-    }
-    
-    throw new Error('No accessible transcript found for this video');
+
+    // Method 2: Use Whisper API for audio transcription
+    console.log('No existing captions found, attempting audio transcription...');
+    return await transcribeAudioWithWhisper(videoId);
     
   } catch (error) {
     console.error('Transcript extraction error:', error);
     throw error;
+  }
+}
+
+async function tryExistingCaptions(videoId: string) {
+  const formats = ['json3', 'srv3', 'srv2', 'srv1'];
+  const languages = ['en', 'ja', 'es', 'fr', 'de', 'it', 'auto'];
+  
+  for (const format of formats) {
+    for (const lang of languages) {
+      const transcriptUrl = `https://www.youtube.com/api/timedtext?lang=${lang}&v=${videoId}&fmt=${format}`;
+      
+      try {
+        const response = await fetch(transcriptUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        });
+        
+        if (response.ok) {
+          const responseText = await response.text();
+          
+          if (responseText && responseText.trim().length > 10) {
+            if (format === 'json3') {
+              try {
+                const data = JSON.parse(responseText);
+                if (data.events && data.events.length > 0) {
+                  return extractTextFromTimedText(data);
+                }
+              } catch (parseError) {
+                // Continue to XML parsing
+              }
+            }
+            
+            const xmlText = extractTextFromXML(responseText);
+            if (xmlText && xmlText.length > 50) {
+              return xmlText;
+            }
+          }
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+  }
+  
+  return null;
+}
+
+async function transcribeAudioWithWhisper(videoId: string) {
+  const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+  
+  if (!openAIApiKey) {
+    throw new Error('OpenAI API key not configured - cannot transcribe audio');
+  }
+
+  try {
+    // Get video audio URL
+    const audioUrl = await getVideoAudioUrl(videoId);
+    if (!audioUrl) {
+      throw new Error('Could not extract audio URL from video');
+    }
+
+    console.log('Downloading audio for transcription...');
+    
+    // Download audio
+    const audioResponse = await fetch(audioUrl);
+    if (!audioResponse.ok) {
+      throw new Error('Failed to download video audio');
+    }
+
+    const audioBuffer = await audioResponse.arrayBuffer();
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/mp4' });
+
+    // Prepare form data for Whisper API
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.mp4');
+    formData.append('model', 'whisper-1');
+    formData.append('response_format', 'text');
+
+    console.log('Sending audio to Whisper API...');
+
+    // Send to OpenAI Whisper
+    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+      },
+      body: formData,
+    });
+
+    if (!whisperResponse.ok) {
+      const errorText = await whisperResponse.text();
+      throw new Error(`Whisper API error: ${errorText}`);
+    }
+
+    const transcript = await whisperResponse.text();
+    
+    if (!transcript || transcript.trim().length < 10) {
+      throw new Error('Whisper returned empty or very short transcript');
+    }
+
+    console.log('Successfully transcribed audio with Whisper, length:', transcript.length);
+    return transcript.trim();
+
+  } catch (error) {
+    console.error('Whisper transcription error:', error);
+    throw new Error(`Audio transcription failed: ${error.message}`);
+  }
+}
+
+async function getVideoAudioUrl(videoId: string) {
+  try {
+    // Use yt-dlp style approach to get audio stream URL
+    const infoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    
+    // This is a simplified approach - in production you might want to use
+    // a more robust method to extract audio URLs
+    const response = await fetch(infoUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch video page');
+    }
+    
+    const pageContent = await response.text();
+    
+    // Look for audio stream URLs in the page content
+    // This is a basic implementation - you might need more sophisticated parsing
+    const audioUrlMatch = pageContent.match(/"url":"([^"]*audio[^"]*)"/) || 
+                         pageContent.match(/"url":"([^"]*mime=audio[^"]*)"/) ||
+                         pageContent.match(/(?:"audioQuality"|"audio")[^}]*"url":"([^"]+)"/);
+    
+    if (audioUrlMatch && audioUrlMatch[1]) {
+      // Decode URL
+      return decodeURIComponent(audioUrlMatch[1].replace(/\\u0026/g, '&'));
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error extracting audio URL:', error);
+    return null;
   }
 }
 
@@ -105,7 +180,6 @@ function extractTextFromTimedText(data: any): string {
     if (event.segs) {
       for (const seg of event.segs) {
         if (seg.utf8) {
-          // Clean up the text and add proper spacing
           const text = seg.utf8.replace(/\n/g, ' ').trim();
           if (text) {
             transcript += text + ' ';
@@ -120,14 +194,12 @@ function extractTextFromTimedText(data: any): string {
 
 function extractTextFromXML(xmlText: string): string {
   try {
-    // Extract text from XML caption formats
     const textMatches = xmlText.match(/<text[^>]*>([^<]+)<\/text>/g);
     if (textMatches) {
       let transcript = '';
       for (const match of textMatches) {
         const textContent = match.replace(/<[^>]*>/g, '').trim();
         if (textContent) {
-          // Decode HTML entities
           const decoded = textContent
             .replace(/&amp;/g, '&')
             .replace(/&lt;/g, '<')
@@ -135,19 +207,6 @@ function extractTextFromXML(xmlText: string): string {
             .replace(/&quot;/g, '"')
             .replace(/&#39;/g, "'");
           transcript += decoded + ' ';
-        }
-      }
-      return transcript.trim();
-    }
-    
-    // Alternative: try to extract any text content between tags
-    const simpleTextMatches = xmlText.match(/>([^<]+)</g);
-    if (simpleTextMatches) {
-      let transcript = '';
-      for (const match of simpleTextMatches) {
-        const text = match.slice(1, -1).trim();
-        if (text && text.length > 2 && !text.includes('=')) {
-          transcript += text + ' ';
         }
       }
       return transcript.trim();
@@ -206,8 +265,8 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'No transcript available or transcript too short',
-          suggestion: 'This video may not have captions available, may be age-restricted, or captions may be disabled by the creator.'
+          error: 'Could not extract or generate transcript',
+          suggestion: 'This video may not have captions available and audio transcription failed.'
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
