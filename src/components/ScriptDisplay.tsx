@@ -1,9 +1,8 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Highlight } from 'lucide-react';
+import { FileText, Highlighter } from 'lucide-react';
 
 interface ScriptDisplayProps {
   script: string;
@@ -49,7 +48,7 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
         </CardTitle>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setHighlightedWords([])}>
-            <Highlight className="w-4 h-4 mr-2" />
+            <Highlighter className="w-4 h-4 mr-2" />
             Clear Highlights
           </Button>
         </div>
