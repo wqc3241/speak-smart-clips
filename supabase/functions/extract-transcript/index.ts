@@ -7,21 +7,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Simplified transcript extraction focusing on captions first, then Whisper
+// Enhanced subtitle extraction focusing on YouTube's caption system
 async function extractTranscript(videoId: string) {
   try {
-    console.log('Attempting to find existing captions...');
-    const existingTranscript = await tryExistingCaptions(videoId);
-    if (existingTranscript && existingTranscript.length > 50) {
-      console.log('Found existing captions, length:', existingTranscript.length);
-      return existingTranscript;
+    console.log('Attempting to extract YouTube subtitles...');
+    const subtitleTranscript = await extractYouTubeSubtitles(videoId);
+    
+    if (subtitleTranscript && subtitleTranscript.length > 50) {
+      console.log('Successfully extracted subtitles, length:', subtitleTranscript.length);
+      return subtitleTranscript;
     }
 
-    console.log('No existing captions found, using Whisper API...');
+    console.log('No subtitles found, trying Whisper as fallback...');
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     
     if (!openAIApiKey) {
-      throw new Error('No captions found and OpenAI API key not configured');
+      throw new Error('No subtitles available and OpenAI API key not configured');
     }
 
     return await transcribeWithWhisper(videoId, openAIApiKey);
@@ -32,50 +33,166 @@ async function extractTranscript(videoId: string) {
   }
 }
 
-async function tryExistingCaptions(videoId: string) {
-  const formats = ['json3', 'srv3', 'srv2', 'srv1', 'ttml', 'vtt'];
-  const languages = ['en', 'auto', 'ja', 'es', 'fr', 'de', 'it', 'ko', 'zh', 'pt', 'ru'];
-  
-  for (const format of formats) {
-    for (const lang of languages) {
-      const transcriptUrl = `https://www.youtube.com/api/timedtext?lang=${lang}&v=${videoId}&fmt=${format}`;
+async function extractYouTubeSubtitles(videoId: string) {
+  try {
+    // First, try to get video page to extract subtitle tracks
+    const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    console.log('Fetching video page for subtitle tracks...');
+    
+    const pageResponse = await fetch(videoPageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+      }
+    });
+
+    if (!pageResponse.ok) {
+      throw new Error(`Failed to fetch video page: ${pageResponse.status}`);
+    }
+
+    const pageContent = await pageResponse.text();
+    
+    // Extract caption tracks from the page
+    const captionTracks = extractCaptionTracksFromPage(pageContent);
+    
+    if (captionTracks.length > 0) {
+      console.log(`Found ${captionTracks.length} caption tracks`);
       
+      // Try each caption track
+      for (const track of captionTracks) {
+        try {
+          const transcript = await fetchCaptionTrack(track.baseUrl);
+          if (transcript && transcript.length > 50) {
+            return transcript;
+          }
+        } catch (error) {
+          console.log(`Failed to fetch track ${track.languageCode}:`, error.message);
+          continue;
+        }
+      }
+    }
+
+    // Fallback: Try direct timedtext API calls
+    console.log('Trying direct timedtext API...');
+    return await tryDirectTimedTextAPI(videoId);
+    
+  } catch (error) {
+    console.error('YouTube subtitle extraction error:', error);
+    return null;
+  }
+}
+
+function extractCaptionTracksFromPage(pageContent: string) {
+  const tracks = [];
+  
+  try {
+    // Look for caption tracks in the page
+    const captionTracksMatch = pageContent.match(/"captionTracks":\s*(\[.*?\])/);
+    if (captionTracksMatch) {
+      const captionTracks = JSON.parse(captionTracksMatch[1]);
+      
+      for (const track of captionTracks) {
+        if (track.baseUrl) {
+          tracks.push({
+            baseUrl: track.baseUrl,
+            languageCode: track.languageCode || 'unknown',
+            name: track.name?.simpleText || 'Unknown'
+          });
+        }
+      }
+    }
+
+    // Also look for automatic captions
+    const autoTracksMatch = pageContent.match(/"automaticCaptions":\s*({.*?})/);
+    if (autoTracksMatch) {
+      const autoTracks = JSON.parse(autoTracksMatch[1]);
+      
+      for (const [lang, trackList] of Object.entries(autoTracks)) {
+        if (Array.isArray(trackList)) {
+          for (const track of trackList) {
+            if (track.baseUrl) {
+              tracks.push({
+                baseUrl: track.baseUrl,
+                languageCode: lang,
+                name: 'Auto-generated'
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (parseError) {
+    console.log('Failed to parse caption tracks from page:', parseError);
+  }
+
+  // Sort tracks by preference (manual captions first, then English auto-captions)
+  tracks.sort((a, b) => {
+    if (a.name.includes('Auto') && !b.name.includes('Auto')) return 1;
+    if (!a.name.includes('Auto') && b.name.includes('Auto')) return -1;
+    if (a.languageCode === 'en' && b.languageCode !== 'en') return -1;
+    if (a.languageCode !== 'en' && b.languageCode === 'en') return 1;
+    return 0;
+  });
+
+  return tracks;
+}
+
+async function fetchCaptionTrack(baseUrl: string) {
+  try {
+    // Decode the URL and add format parameter for plain text
+    const url = baseUrl.replace(/\\u0026/g, '&') + '&fmt=vtt';
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/vtt, application/x-subrip, text/plain, */*',
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const content = await response.text();
+    return parseSubtitleContent(content);
+    
+  } catch (error) {
+    console.log('Failed to fetch caption track:', error.message);
+    return null;
+  }
+}
+
+async function tryDirectTimedTextAPI(videoId: string) {
+  const languages = ['en', 'auto'];
+  const formats = ['vtt', 'srv3', 'json3'];
+  
+  for (const lang of languages) {
+    for (const fmt of formats) {
       try {
-        const response = await fetch(transcriptUrl, {
+        const url = `https://www.youtube.com/api/timedtext?lang=${lang}&v=${videoId}&fmt=${fmt}&tlang=en`;
+        
+        const response = await fetch(url, {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
             'Referer': `https://www.youtube.com/watch?v=${videoId}`,
           }
         });
         
         if (response.ok) {
-          const responseText = await response.text();
+          const content = await response.text();
           
-          if (responseText && responseText.trim().length > 10) {
-            if (format === 'json3') {
-              try {
-                const data = JSON.parse(responseText);
-                if (data.events && data.events.length > 0) {
-                  const transcript = extractTextFromTimedText(data);
-                  if (transcript && transcript.length > 50) {
-                    return transcript;
-                  }
-                }
-              } catch (parseError) {
-                console.log('JSON parsing failed, trying XML:', parseError);
-              }
-            }
-            
-            const xmlText = extractTextFromXML(responseText);
-            if (xmlText && xmlText.length > 50) {
-              return xmlText;
+          if (content && content.trim().length > 10) {
+            const transcript = parseSubtitleContent(content);
+            if (transcript && transcript.length > 50) {
+              console.log(`Found transcript via direct API: ${lang} ${fmt}`);
+              return transcript;
             }
           }
         }
       } catch (error) {
-        console.log(`Failed to fetch ${format} ${lang}:`, error.message);
+        console.log(`Direct API failed for ${lang} ${fmt}:`, error.message);
         continue;
       }
     }
@@ -84,169 +201,47 @@ async function tryExistingCaptions(videoId: string) {
   return null;
 }
 
-async function transcribeWithWhisper(videoId: string, openAIApiKey: string) {
+function parseSubtitleContent(content: string): string {
   try {
-    console.log('Using Whisper API to transcribe audio...');
-    
-    // Use yt-dlp style approach to get direct audio URL
-    const audioUrl = await getAudioStreamUrl(videoId);
-    
-    if (!audioUrl) {
-      throw new Error('Could not find audio stream for this video');
-    }
-
-    console.log('Found audio stream, downloading...');
-    
-    // Download audio with size limit for faster processing
-    const audioResponse = await fetch(audioUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Range': 'bytes=0-20971520', // Limit to ~20MB
+    // Try JSON format first
+    if (content.trim().startsWith('{')) {
+      const data = JSON.parse(content);
+      if (data.events && data.events.length > 0) {
+        return extractTextFromJSON(data);
       }
-    });
-
-    if (!audioResponse.ok) {
-      throw new Error(`Failed to download audio: ${audioResponse.status}`);
     }
 
-    const audioBuffer = await audioResponse.arrayBuffer();
-    
-    if (audioBuffer.byteLength === 0) {
-      throw new Error('Downloaded audio file is empty');
-    }
-    
-    console.log('Audio downloaded, size:', audioBuffer.byteLength, 'bytes');
-    
-    // Create audio blob for Whisper API
-    const audioBlob = new Blob([audioBuffer], { type: 'audio/mp4' });
-
-    // Prepare form data
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.mp4');
-    formData.append('model', 'whisper-1');
-    formData.append('response_format', 'text');
-
-    console.log('Sending to Whisper API...');
-
-    // Call Whisper API
-    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-      },
-      body: formData,
-    });
-
-    if (!whisperResponse.ok) {
-      const errorText = await whisperResponse.text();
-      console.error('Whisper API error:', errorText);
-      throw new Error(`Whisper API error (${whisperResponse.status}): ${errorText}`);
+    // Try VTT format
+    if (content.includes('WEBVTT')) {
+      return extractTextFromVTT(content);
     }
 
-    const transcript = await whisperResponse.text();
-    
-    if (!transcript || transcript.trim().length < 10) {
-      throw new Error('Whisper returned empty transcript');
+    // Try XML format
+    if (content.includes('<text') || content.includes('<p>')) {
+      return extractTextFromXML(content);
     }
 
-    console.log('Whisper transcription successful, length:', transcript.length);
-    return transcript.trim();
-
+    // Fallback: try to extract any text content
+    return extractTextFromGeneric(content);
+    
   } catch (error) {
-    console.error('Whisper transcription error:', error);
-    throw new Error(`Audio transcription failed: ${error.message}`);
+    console.error('Subtitle parsing error:', error);
+    return '';
   }
 }
 
-async function getAudioStreamUrl(videoId: string): Promise<string | null> {
-  try {
-    // Try multiple video info endpoints
-    const infoUrls = [
-      `https://www.youtube.com/watch?v=${videoId}`,
-      `https://www.youtube.com/embed/${videoId}`,
-    ];
-
-    for (const url of infoUrls) {
-      try {
-        console.log('Trying to extract audio URL from:', url);
-        
-        const response = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          }
-        });
-        
-        if (!response.ok) continue;
-        
-        const pageContent = await response.text();
-        
-        // Look for adaptive formats with audio
-        const adaptiveFormatsMatch = pageContent.match(/"adaptiveFormats":\s*(\[.*?\])/);
-        if (adaptiveFormatsMatch) {
-          try {
-            const adaptiveFormats = JSON.parse(adaptiveFormatsMatch[1]);
-            
-            // Find audio-only stream
-            for (const format of adaptiveFormats) {
-              if (format.mimeType && format.mimeType.includes('audio') && format.url) {
-                const decodedUrl = format.url.replace(/\\u0026/g, '&');
-                console.log('Found audio stream URL');
-                return decodedUrl;
-              }
-            }
-          } catch (parseError) {
-            console.log('Failed to parse adaptive formats:', parseError);
-          }
-        }
-        
-        // Fallback: look for any audio URL patterns
-        const audioUrlPatterns = [
-          /"url":"([^"]*audio[^"]*)",/g,
-          /"url":"([^"]*mime=audio[^"]*)",/g,
-        ];
-        
-        for (const pattern of audioUrlPatterns) {
-          const matches = pageContent.match(pattern);
-          if (matches) {
-            for (const match of matches) {
-              const urlMatch = match.match(/"url":"([^"]+)"/);
-              if (urlMatch) {
-                const decodedUrl = decodeURIComponent(urlMatch[1].replace(/\\u0026/g, '&'));
-                console.log('Found audio URL via pattern matching');
-                return decodedUrl;
-              }
-            }
-          }
-        }
-        
-      } catch (error) {
-        console.log(`Failed to get info from ${url}:`, error.message);
-        continue;
-      }
-    }
-    
-    console.log('No audio stream URL found');
-    return null;
-    
-  } catch (error) {
-    console.error('Error extracting audio URL:', error);
-    return null;
-  }
-}
-
-function extractTextFromTimedText(data: any): string {
-  if (!data.events) return '';
-  
+function extractTextFromJSON(data: any): string {
   let transcript = '';
   
-  for (const event of data.events) {
-    if (event.segs) {
-      for (const seg of event.segs) {
-        if (seg.utf8) {
-          const text = seg.utf8.replace(/\n/g, ' ').trim();
-          if (text) {
-            transcript += text + ' ';
+  if (data.events) {
+    for (const event of data.events) {
+      if (event.segs) {
+        for (const seg of event.segs) {
+          if (seg.utf8) {
+            const text = seg.utf8.replace(/\n/g, ' ').trim();
+            if (text) {
+              transcript += text + ' ';
+            }
           }
         }
       }
@@ -256,43 +251,145 @@ function extractTextFromTimedText(data: any): string {
   return transcript.trim();
 }
 
-function extractTextFromXML(xmlText: string): string {
-  try {
-    const patterns = [
-      /<text[^>]*>([^<]+)<\/text>/g,
-      /<p[^>]*>([^<]+)<\/p>/g,
-      /<span[^>]*>([^<]+)<\/span>/g,
-    ];
-
-    let transcript = '';
-    
-    for (const pattern of patterns) {
-      const matches = Array.from(xmlText.matchAll(pattern));
-      if (matches.length > 0) {
-        for (const match of matches) {
-          const textContent = match[1]?.trim();
-          if (textContent && textContent.length > 2) {
-            const decoded = textContent
-              .replace(/&amp;/g, '&')
-              .replace(/&lt;/g, '<')
-              .replace(/&gt;/g, '>')
-              .replace(/&quot;/g, '"')
-              .replace(/&#39;/g, "'")
-              .replace(/&apos;/g, "'");
-            transcript += decoded + ' ';
-          }
-        }
-        
-        if (transcript.trim().length > 50) {
-          return transcript.trim();
-        }
-      }
+function extractTextFromVTT(content: string): string {
+  const lines = content.split('\n');
+  let transcript = '';
+  
+  for (const line of lines) {
+    // Skip VTT headers and timestamp lines
+    if (line.startsWith('WEBVTT') || 
+        line.includes('-->') || 
+        line.trim() === '' ||
+        /^\d+$/.test(line.trim())) {
+      continue;
     }
     
+    const cleanLine = line.replace(/<[^>]*>/g, '').trim();
+    if (cleanLine) {
+      transcript += cleanLine + ' ';
+    }
+  }
+  
+  return transcript.trim();
+}
+
+function extractTextFromXML(content: string): string {
+  const patterns = [
+    /<text[^>]*>([^<]+)<\/text>/g,
+    /<p[^>]*>([^<]+)<\/p>/g,
+  ];
+
+  let transcript = '';
+  
+  for (const pattern of patterns) {
+    const matches = Array.from(content.matchAll(pattern));
+    if (matches.length > 0) {
+      for (const match of matches) {
+        const text = match[1]?.trim();
+        if (text && text.length > 2) {
+          const decoded = text
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+          transcript += decoded + ' ';
+        }
+      }
+      
+      if (transcript.trim().length > 50) {
+        return transcript.trim();
+      }
+    }
+  }
+  
+  return transcript.trim();
+}
+
+function extractTextFromGeneric(content: string): string {
+  // Remove common markup and extract text
+  const cleaned = content
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}\.\d{3}/g, '')
+    .replace(/^\d+$/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+    
+  return cleaned;
+}
+
+// Simplified Whisper fallback
+async function transcribeWithWhisper(videoId: string, openAIApiKey: string) {
+  try {
+    console.log('Using Whisper API as fallback...');
+    
+    // Try to get a simple audio stream
+    const audioUrl = await getSimpleAudioUrl(videoId);
+    
+    if (!audioUrl) {
+      throw new Error('Could not find audio stream');
+    }
+
+    const audioResponse = await fetch(audioUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Range': 'bytes=0-10485760', // Limit to 10MB
+      }
+    });
+
+    if (!audioResponse.ok) {
+      throw new Error(`Failed to download audio: ${audioResponse.status}`);
+    }
+
+    const audioBuffer = await audioResponse.arrayBuffer();
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/mp4' });
+
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.mp4');
+    formData.append('model', 'whisper-1');
+    formData.append('response_format', 'text');
+
+    const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+      },
+      body: formData,
+    });
+
+    if (!whisperResponse.ok) {
+      throw new Error(`Whisper API error: ${whisperResponse.status}`);
+    }
+
+    const transcript = await whisperResponse.text();
     return transcript.trim();
+
   } catch (error) {
-    console.error('XML parsing error:', error);
-    return '';
+    console.error('Whisper transcription error:', error);
+    throw new Error(`Audio transcription failed: ${error.message}`);
+  }
+}
+
+async function getSimpleAudioUrl(videoId: string): Promise<string | null> {
+  try {
+    const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      }
+    });
+    
+    const content = await response.text();
+    
+    // Look for audio streams in adaptive formats
+    const audioMatch = content.match(/"url":"([^"]*audio[^"]*)",/);
+    if (audioMatch) {
+      return decodeURIComponent(audioMatch[1].replace(/\\u0026/g, '&'));
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting audio URL:', error);
+    return null;
   }
 }
 
@@ -301,7 +398,6 @@ function getVideoTitle(videoId: string): string {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -316,24 +412,20 @@ serve(async (req) => {
     console.log('Extracting transcript for video ID:', videoId);
 
     const videoTitle = getVideoTitle(videoId);
-    console.log('Processing video:', videoTitle);
-
     const transcript = await extractTranscript(videoId);
     
     if (!transcript || transcript.length < 10) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Could not extract or generate transcript',
-          suggestion: 'This video may not have captions available and audio transcription failed. Please try a different video.'
+          error: 'Could not extract transcript',
+          suggestion: 'This video may not have captions available. Please try a different video.'
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
-
-    console.log('Successfully extracted transcript, length:', transcript.length);
 
     return new Response(
       JSON.stringify({
