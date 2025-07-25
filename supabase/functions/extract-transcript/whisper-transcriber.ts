@@ -76,13 +76,17 @@ async function getYouTubeAudioUrl(videoId: string): Promise<string> {
     const pageContent = await pageResponse.text();
     console.log('Page content fetched, length:', pageContent.length);
     
-    // Enhanced patterns for finding player response
+    // Enhanced patterns for finding player response with better matching
     const patterns = [
-      /var ytInitialPlayerResponse = ({.*?});/,
-      /window\["ytInitialPlayerResponse"\] = ({.*?});/,
-      /"ytInitialPlayerResponse":({.*?}),"ytInitialData"/,
-      /ytInitialPlayerResponse":\s*({.*?}),\s*"ytInitialData"/,
-      /ytInitialPlayerResponse['"]?\s*[:=]\s*({.*?})(?=[;,\]}])/
+      // Most common modern pattern
+      /"ytInitialPlayerResponse":\s*({.+?})(?=;\s*(?:var|window|if|<\/script))/s,
+      // Alternative with quotes
+      /ytInitialPlayerResponse":\s*({.+?}),\s*"ytInitialData"/s,
+      // Variable assignment patterns
+      /var\s+ytInitialPlayerResponse\s*=\s*({.+?})(?=;\s*(?:var|window|if|<\/script))/s,
+      /window\["ytInitialPlayerResponse"\]\s*=\s*({.+?})(?=;\s*(?:var|window|if|<\/script))/s,
+      // Embedded patterns
+      /ytInitialPlayerResponse['"]?\s*[:=]\s*({.+?})(?=[;,\]}])/s
     ];
 
     let playerResponse = null;
@@ -91,28 +95,75 @@ async function getYouTubeAudioUrl(videoId: string): Promise<string> {
       const match = pageContent.match(pattern);
       if (match) {
         try {
-          const jsonString = match[1];
+          let jsonString = match[1];
+          
+          // Clean up common issues in JSON strings
+          jsonString = jsonString.replace(/\\"/g, '"')
+                                 .replace(/\\n/g, '')
+                                 .replace(/\\t/g, '')
+                                 .replace(/\\r/g, '');
+          
+          // Find the end of the JSON object properly
+          let braceCount = 0;
+          let endIndex = 0;
+          
+          for (let i = 0; i < jsonString.length; i++) {
+            if (jsonString[i] === '{') braceCount++;
+            if (jsonString[i] === '}') braceCount--;
+            if (braceCount === 0) {
+              endIndex = i + 1;
+              break;
+            }
+          }
+          
+          if (endIndex > 0) {
+            jsonString = jsonString.substring(0, endIndex);
+          }
+          
           playerResponse = JSON.parse(jsonString);
           console.log('Found player response with pattern:', pattern.source.substring(0, 50) + '...');
           break;
         } catch (parseError) {
-          console.log('Failed to parse player response, trying next pattern');
+          console.log('Failed to parse player response, trying next pattern:', parseError.message);
           continue;
         }
       }
     }
 
     if (!playerResponse) {
-      // Fallback: try to extract from any JSON-like structure
-      const fallbackPattern = /"streamingData":\s*({[^}]*"adaptiveFormats"[^}]*})/;
-      const fallbackMatch = pageContent.match(fallbackPattern);
-      if (fallbackMatch) {
-        try {
-          const streamingData = JSON.parse(fallbackMatch[1]);
-          playerResponse = { streamingData };
-          console.log('Found streaming data using fallback pattern');
-        } catch (e) {
-          console.log('Fallback pattern also failed');
+      // Multiple fallback strategies
+      const fallbackPatterns = [
+        // Look for streamingData directly
+        /"streamingData":\s*({[^{}]*(?:{[^{}]*}[^{}]*)*})/g,
+        // Look for adaptiveFormats array
+        /"adaptiveFormats":\s*(\[[^\]]*\])/g,
+        // Look for formats array
+        /"formats":\s*(\[[^\]]*\])/g
+      ];
+      
+      for (const fallbackPattern of fallbackPatterns) {
+        const matches = [...pageContent.matchAll(fallbackPattern)];
+        if (matches.length > 0) {
+          try {
+            for (const match of matches) {
+              const data = JSON.parse(match[1]);
+              if (data) {
+                if (fallbackPattern.source.includes('streamingData')) {
+                  playerResponse = { streamingData: data };
+                } else if (fallbackPattern.source.includes('adaptiveFormats')) {
+                  playerResponse = { streamingData: { adaptiveFormats: data } };
+                } else if (fallbackPattern.source.includes('formats')) {
+                  playerResponse = { streamingData: { formats: data } };
+                }
+                console.log('Found data using fallback pattern:', fallbackPattern.source.substring(0, 30) + '...');
+                break;
+              }
+            }
+            if (playerResponse) break;
+          } catch (e) {
+            console.log('Fallback pattern failed:', e.message);
+            continue;
+          }
         }
       }
     }
