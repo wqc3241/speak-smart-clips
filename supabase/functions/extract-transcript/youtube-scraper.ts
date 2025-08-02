@@ -69,24 +69,53 @@ export async function tryYouTubeDataAPI(videoId: string, apiKey: string): Promis
 
 export async function extractYouTubeSubtitles(videoId: string): Promise<string | null> {
   try {
-    console.log('Fetching video page for subtitle tracks...');
+    console.log('=== SUBTITLE DEBUG: Starting subtitle extraction for video:', videoId);
     const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    console.log('=== SUBTITLE DEBUG: Fetching URL:', videoPageUrl);
     
-    const pageResponse = await fetch(videoPageUrl, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cookie': 'CONSENT=YES+cb.20210328-17-p0.en+FX+000'
-      }
-    });
+    // Enhanced headers with more realistic browser simulation
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      'Accept-Language': 'en-US,en;q=0.9,ja;q=0.8',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"Windows"',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
+      'Cookie': 'CONSENT=PENDING+987; VISITOR_INFO1_LIVE=dGlsc19lbmFibGVk; PREF=f4=4000000&tz=America.New_York&f6=40000000&f7=100'
+    };
+    
+    console.log('=== SUBTITLE DEBUG: Request headers prepared');
+    
+    const pageResponse = await fetch(videoPageUrl, { headers });
+
+    console.log('=== SUBTITLE DEBUG: Response status:', pageResponse.status);
+    console.log('=== SUBTITLE DEBUG: Response headers:', Object.fromEntries(pageResponse.headers.entries()));
 
     if (!pageResponse.ok) {
+      console.log('=== SUBTITLE DEBUG: Failed to fetch video page, status:', pageResponse.status);
       throw new Error(`Failed to fetch video page: ${pageResponse.status}`);
     }
 
     const pageContent = await pageResponse.text();
-    console.log('Page content length:', pageContent.length);
+    console.log('=== SUBTITLE DEBUG: Page content length:', pageContent.length);
+    
+    // Log a sample of the page content to see what we're working with
+    const contentSample = pageContent.substring(0, 1000);
+    console.log('=== SUBTITLE DEBUG: Page content sample:', contentSample);
+    
+    // Check if page contains expected YouTube elements
+    const hasYouTubeElements = pageContent.includes('ytInitialPlayerResponse') || 
+                               pageContent.includes('ytInitialData') ||
+                               pageContent.includes('var ytInitialPlayerResponse');
+    console.log('=== SUBTITLE DEBUG: Page contains YouTube elements:', hasYouTubeElements);
     
     // Extract caption tracks from the page using improved patterns
     const captionTracks = extractCaptionTracksFromPage(pageContent, videoId);
@@ -271,8 +300,11 @@ async function fetchCaptionTrack(baseUrl: string): Promise<string | null> {
 }
 
 async function tryEnhancedTimedTextAPI(videoId: string): Promise<string | null> {
-  const languages = ['en', 'en-US', 'en-GB', 'auto'];
-  const formats = ['json3', 'vtt', 'srv3'];
+  console.log('=== TIMEDTEXT DEBUG: Starting enhanced timedtext API attempts');
+  
+  // Extended language list including Japanese and common auto-generated languages
+  const languages = ['en', 'en-US', 'en-GB', 'ja', 'auto'];
+  const formats = ['json3', 'vtt', 'srv1', 'srv2', 'srv3'];
   
   for (const lang of languages) {
     for (const fmt of formats) {
@@ -283,45 +315,71 @@ async function tryEnhancedTimedTextAPI(videoId: string): Promise<string | null> 
           `${baseUrl}&tlang=en`,
           `${baseUrl}&kind=asr`,
           `${baseUrl}&kind=asr&tlang=en`,
-          `${baseUrl}&xorb=2&hl=en&c=WEB&cver=2.20240304.00.00`
+          `${baseUrl}&xorb=2&hl=en&c=WEB&cver=2.20240304.00.00`,
+          `${baseUrl}&caps=asr&exp=xftt&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=0&sparams=ip%2Cipbits%2Cexpire&signature=x`,
+          `${baseUrl}&fmt=${fmt}&tlang=en&ts=1640000000&caps=asr`
         ];
         
         for (const url of variations) {
           try {
-            console.log(`Trying direct API: ${url}`);
+            console.log(`=== TIMEDTEXT DEBUG: Trying ${lang} ${fmt}: ${url.substring(0, 120)}...`);
             
             const response = await fetch(url, {
               headers: {
-                'User-Agent': USER_AGENT,
-                'Accept': 'application/json, text/plain, */*',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/vtt, application/x-subrip, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9,ja;q=0.8',
                 'Referer': 'https://www.youtube.com/',
-                'Origin': 'https://www.youtube.com'
+                'Origin': 'https://www.youtube.com',
+                'Cache-Control': 'no-cache'
               }
             });
             
+            console.log(`=== TIMEDTEXT DEBUG: Response status: ${response.status} for ${lang} ${fmt}`);
+            console.log(`=== TIMEDTEXT DEBUG: Response headers:`, Object.fromEntries(response.headers.entries()));
+            
             if (response.ok) {
               const content = await response.text();
+              console.log(`=== TIMEDTEXT DEBUG: Content length: ${content.length} for ${lang} ${fmt}`);
               
-              if (content && content.trim().length > 50) {
-                const { parseSubtitleContent } = await import('./subtitle-parser.ts');
-                const transcript = parseSubtitleContent(content);
-                if (transcript && transcript.length > 50) {
-                  console.log(`Successfully extracted via direct API: ${lang} ${fmt}`);
-                  return transcript;
+              if (content.length > 10) {
+                // Log content sample for debugging
+                const contentSample = content.substring(0, 200);
+                console.log(`=== TIMEDTEXT DEBUG: Content sample for ${lang} ${fmt}:`, contentSample);
+                
+                if (content.trim().length > 50) {
+                  const { parseSubtitleContent } = await import('./subtitle-parser.ts');
+                  const transcript = parseSubtitleContent(content);
+                  console.log(`=== TIMEDTEXT DEBUG: Parsed transcript length: ${transcript?.length || 0} for ${lang} ${fmt}`);
+                  
+                  if (transcript && transcript.length > 50) {
+                    console.log(`=== TIMEDTEXT DEBUG: ✅ Successfully extracted via direct API: ${lang} ${fmt}`);
+                    console.log(`=== TIMEDTEXT DEBUG: Transcript preview:`, transcript.substring(0, 200) + '...');
+                    return transcript;
+                  } else {
+                    console.log(`=== TIMEDTEXT DEBUG: ❌ Transcript too short after parsing for ${lang} ${fmt}`);
+                  }
+                } else {
+                  console.log(`=== TIMEDTEXT DEBUG: ❌ Raw content too short for ${lang} ${fmt}`);
                 }
+              } else {
+                console.log(`=== TIMEDTEXT DEBUG: ❌ Content length too small: ${content.length} for ${lang} ${fmt}`);
               }
+            } else {
+              console.log(`=== TIMEDTEXT DEBUG: ❌ HTTP error ${response.status} for ${lang} ${fmt}`);
             }
           } catch (error) {
-            console.log(`Direct API variation failed: ${error.message}`);
+            console.log(`=== TIMEDTEXT DEBUG: ❌ Request failed for ${lang} ${fmt}:`, error.message);
             continue;
           }
         }
       } catch (error) {
-        console.log(`Direct API failed for ${lang} ${fmt}:`, error.message);
+        console.log(`=== TIMEDTEXT DEBUG: ❌ Outer loop failed for ${lang} ${fmt}:`, error.message);
         continue;
       }
     }
   }
   
+  console.log('=== TIMEDTEXT DEBUG: ❌ All timedtext API attempts failed');
   return null;
 }
