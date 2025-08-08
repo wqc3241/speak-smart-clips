@@ -30,65 +30,98 @@ async function fetchVideoTitle(videoId: string): Promise<string> {
 }
 
 async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime: string } | null> {
-  // Strategy A: Parse watch page for adaptive audio formats
-  try {
-    const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const res = await fetch(watchUrl, {
-      headers: {
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "accept-language": "en-US,en;q=0.9",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
-        "cache-control": "no-cache",
-        "pragma": "no-cache",
-      },
-    });
-    const html = await res.text();
+  // Helper to safely parse JSON-only responses
+  const fetchJsonSafe = async (url: string) => {
+    const resp = await fetch(url, { headers: { 'accept': 'application/json' } });
+    const ct = resp.headers.get('content-type') || '';
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!ct.includes('application/json')) throw new Error(`Non-JSON response: ${ct}`);
+    return await resp.json();
+  };
 
-    const playerRespMatch = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;?/s);
-    if (playerRespMatch) {
-      const json = JSON.parse(playerRespMatch[1]);
-      const streaming = json?.streamingData;
-      const adaptive = streaming?.adaptiveFormats || [];
-
-      const candidates = adaptive.filter((f: any) => String(f.mimeType || '').includes('audio'));
-      const prefer = [
-        (f: any) => String(f.mimeType || '').includes('audio/mp4'),
-        (f: any) => String(f.mimeType || '').includes('audio/webm'),
-      ];
-
-      for (const pref of prefer) {
-        const pick = candidates.find(pref) || candidates[0];
-        if (!pick) break;
-        // Direct URL available
-        if (pick.url) {
-          const mime = String(pick.mimeType || '').split(';')[0] || 'audio/mp4';
-          return { url: pick.url as string, mime };
-        }
-        // Some formats require signature deciphering (signatureCipher). Not supported here.
-        // We skip those and try other strategies.
-      }
-    }
-  } catch (e) {
-    console.warn('Watch page parse failed:', e);
-  }
-
-  // Strategy B: Piped API fallback (public instance)
-  try {
-    const piped = await fetch(`https://piped.video/api/v1/streams/${videoId}`, {
-      headers: { 'accept': 'application/json' },
-    });
-    if (piped.ok) {
-      const data = await piped.json();
+  // Strategy A: Try multiple Piped instances
+  const pipedHosts = [
+    'https://piped.video',
+    'https://pipedapi.kavin.rocks',
+    'https://piped.projectsegfau.lt',
+    'https://piped.privacydev.net',
+    'https://pi.ggtyler.dev',
+  ];
+  for (const host of pipedHosts) {
+    try {
+      const data = await fetchJsonSafe(`${host}/api/v1/streams/${videoId}`);
       const audioStreams = data?.audioStreams || [];
-      // Prefer m4a/mp4 then webm
-      const preferred = audioStreams.find((s: any) => /m4a|mp4/.test(s?.mimeType || s?.type || '')) || audioStreams[0];
+      const preferred =
+        audioStreams.find((s: any) => /m4a|mp4/i.test(s?.mimeType || s?.type || '')) ||
+        audioStreams.find((s: any) => /webm/i.test(s?.mimeType || s?.type || '')) ||
+        audioStreams[0];
       if (preferred?.url) {
         const mime = preferred?.mimeType || preferred?.type || 'audio/mp4';
         return { url: preferred.url as string, mime };
       }
+    } catch (e) {
+      console.warn(`Piped host failed ${host}:`, e);
+      continue;
+    }
+  }
+
+  // Strategy B: Try multiple Invidious instances
+  const invidiousHosts = [
+    'https://yewtu.be',
+    'https://vid.puffyan.us',
+    'https://invidious.flokinet.to',
+    'https://invidious.nerdvpn.de',
+    'https://invidious.jing.rocks',
+  ];
+  for (const host of invidiousHosts) {
+    try {
+      const data = await fetchJsonSafe(`${host}/api/v1/videos/${videoId}`);
+      const adaptive = data?.adaptiveFormats || data?.formatStreams || [];
+      const candidates = adaptive.filter((f: any) =>
+        String(f?.type || f?.mimeType || '').toLowerCase().includes('audio')
+      );
+      const preferred =
+        candidates.find((f: any) => /audio\/mp4|m4a/i.test(f?.type || f?.mimeType || '')) ||
+        candidates.find((f: any) => /audio\/webm/i.test(f?.type || f?.mimeType || '')) ||
+        candidates[0];
+      const url = preferred?.url || preferred?.url_signature || preferred?.link;
+      if (url) {
+        const mime = (preferred?.type || preferred?.mimeType || 'audio/mp4').split(';')[0];
+        return { url, mime };
+      }
+    } catch (e) {
+      console.warn(`Invidious host failed ${host}:`, e);
+      continue;
+    }
+  }
+
+  // Strategy C: Parse watch page (best-effort, often signatureCipher only)
+  try {
+    const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const res = await fetch(watchUrl, {
+      headers: {
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'accept-language': 'en-US,en;q=0.9',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
+        'cache-control': 'no-cache',
+        'pragma': 'no-cache',
+      },
+    });
+    const html = await res.text();
+    const match = html.match(/ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\})\s*;\s*var|ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\})\s*;/);
+    const jsonStr = match ? (match[1] || match[2]) : null;
+    if (jsonStr) {
+      const json = JSON.parse(jsonStr);
+      const adaptive = json?.streamingData?.adaptiveFormats || [];
+      const candidates = adaptive.filter((f: any) => String(f.mimeType || '').includes('audio'));
+      const direct = candidates.find((f: any) => !!f.url);
+      if (direct?.url) {
+        const mime = String(direct.mimeType || '').split(';')[0] || 'audio/mp4';
+        return { url: direct.url as string, mime };
+      }
     }
   } catch (e) {
-    console.warn('Piped fallback failed:', e);
+    console.warn('Watch page parse fallback failed:', e);
   }
 
   return null;
