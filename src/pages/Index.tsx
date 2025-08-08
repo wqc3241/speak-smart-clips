@@ -14,7 +14,7 @@ import { ProjectManager } from "@/components/ProjectManager";
 import { Youtube, BookOpen, MessageCircle, Save, History, TestTube } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-
+import { YoutubeTranscript } from 'youtube-transcript';
 const Index = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [currentProject, setCurrentProject] = useState(null);
@@ -29,30 +29,49 @@ const Index = () => {
   };
 
   const fetchTranscript = async (videoId: string) => {
+    // 1) Try client-side transcript first (works for manual/auto captions)
     try {
-      console.log('Fetching transcript for video ID:', videoId);
-      
+      console.log('Trying youtube-transcript for:', videoId);
+      let segments: any[] | null = null;
+      try {
+        segments = await (YoutubeTranscript as any).fetchTranscript(videoId, { lang: 'en' });
+      } catch (e) {
+        // Fallback to any available language
+        segments = await (YoutubeTranscript as any).fetchTranscript(videoId);
+      }
+
+      if (segments && segments.length) {
+        const transcript = segments.map((s: any) => s.text).join(' ');
+        let videoTitle = `Video Lesson - ${videoId}`;
+        try {
+          const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
+          if (res.ok) {
+            const meta = await res.json();
+            if (meta.title) videoTitle = meta.title;
+          }
+        } catch (e) {
+          console.warn('Title fetch failed, using default.', e);
+        }
+        return { transcript, videoTitle, captionsAvailable: true };
+      }
+    } catch (err) {
+      console.warn('youtube-transcript failed:', err);
+    }
+
+    // 2) Fallback to existing Edge Function (temporary)
+    try {
       const { data, error } = await supabase.functions.invoke('extract-transcript', {
         body: { videoId }
       });
-
-      if (error) {
-        console.error('Supabase function error:', error);
-        throw new Error(error.message || 'Failed to extract transcript');
-      }
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to extract transcript');
-      }
-
+      if (error) throw new Error(error.message || 'Failed to extract transcript');
+      if (!data.success) throw new Error(data.error || 'Failed to extract transcript');
       return {
         transcript: data.transcript,
         videoTitle: data.videoTitle,
         captionsAvailable: data.captionsAvailable
       };
-      
-    } catch (error) {
-      console.error('Error fetching transcript:', error);
+    } catch (error: any) {
+      console.error('All methods failed:', error);
       throw new Error(error.message || 'Could not extract transcript from this video');
     }
   };
@@ -78,6 +97,30 @@ const Index = () => {
     return { vocabulary, grammar };
   };
 
+  const saveCurrentProject = () => {
+    if (!currentProject) return;
+    try {
+      const stored = localStorage.getItem('projects');
+      const list = stored ? JSON.parse(stored) : [];
+      const entry = {
+        id: currentProject.id,
+        title: currentProject.title,
+        url: currentProject.url,
+        createdAt: new Date().toISOString(),
+        lastAccessed: new Date().toISOString(),
+        vocabularyCount: currentProject.vocabulary?.length || 0,
+        grammarCount: currentProject.grammar?.length || 0,
+        isFavorite: false,
+      };
+      const updated = [entry, ...list.filter((p: any) => p.url !== entry.url)];
+      localStorage.setItem('projects', JSON.stringify(updated));
+      toast({ title: 'Saved to Projects', description: 'Find it in the Projects tab.' });
+    } catch (e) {
+      console.error('Failed to save project', e);
+      toast({ title: 'Save failed', description: 'Could not save project', variant: 'destructive' });
+    }
+  };
+
   const testAPIs = async () => {
     setIsTesting(true);
     try {
@@ -100,7 +143,7 @@ const Index = () => {
           description: `YouTube: ${data.youtube.success ? '✅' : '❌'} | OpenAI: ${data.openai.success ? '✅' : '❌'}`,
         });
       } else {
-        const issues = [];
+        const issues: string[] = [];
         if (!data.youtube.success) issues.push(`YouTube: ${data.youtube.error}`);
         if (!data.openai.success) issues.push(`OpenAI: ${data.openai.error}`);
         
@@ -111,7 +154,7 @@ const Index = () => {
         });
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('API testing failed:', error);
       toast({
         title: "Testing failed",
@@ -262,7 +305,7 @@ const Index = () => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <ScriptDisplay script={currentProject.script} />
-                  <Button className="w-full" variant="outline">
+                  <Button className="w-full" variant="outline" onClick={saveCurrentProject}>
                     <Save className="w-4 h-4 mr-2" />
                     Save Project
                   </Button>
