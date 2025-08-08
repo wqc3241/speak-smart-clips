@@ -8,9 +8,7 @@ const corsHeaders = {
 
 function extractVideoId(input: string): string | null {
   try {
-    // If it's already a bare ID
     if (/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
-    // Try to parse from URL
     const match = input.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     return match ? match[1] : null;
   } catch {
@@ -32,31 +30,31 @@ async function fetchVideoTitle(videoId: string): Promise<string> {
 async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime: string } | null> {
   // Helper to safely parse JSON-only responses
   const fetchJsonSafe = async (url: string) => {
-    const resp = await fetch(url, { headers: { 'accept': 'application/json' } });
-    const ct = resp.headers.get('content-type') || '';
+    const resp = await fetch(url, { headers: { accept: "application/json" } });
+    const ct = resp.headers.get("content-type") || "";
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    if (!ct.includes('application/json')) throw new Error(`Non-JSON response: ${ct}`);
+    if (!ct.includes("application/json")) throw new Error(`Non-JSON response: ${ct}`);
     return await resp.json();
   };
 
-  // Strategy A: Try multiple Piped instances
+  // Strategy A: Try multiple Piped instances (JSON)
   const pipedHosts = [
-    'https://piped.video',
-    'https://pipedapi.kavin.rocks',
-    'https://piped.projectsegfau.lt',
-    'https://piped.privacydev.net',
-    'https://pi.ggtyler.dev',
+    "https://piped.video",
+    "https://pipedapi.kavin.rocks",
+    "https://piped.projectsegfau.lt",
+    "https://piped.privacydev.net",
+    "https://pi.ggtyler.dev",
   ];
   for (const host of pipedHosts) {
     try {
       const data = await fetchJsonSafe(`${host}/api/v1/streams/${videoId}`);
       const audioStreams = data?.audioStreams || [];
       const preferred =
-        audioStreams.find((s: any) => /m4a|mp4/i.test(s?.mimeType || s?.type || '')) ||
-        audioStreams.find((s: any) => /webm/i.test(s?.mimeType || s?.type || '')) ||
+        audioStreams.find((s: any) => /m4a|mp4/i.test(s?.mimeType || s?.type || "")) ||
+        audioStreams.find((s: any) => /webm/i.test(s?.mimeType || s?.type || "")) ||
         audioStreams[0];
       if (preferred?.url) {
-        const mime = preferred?.mimeType || preferred?.type || 'audio/mp4';
+        const mime = preferred?.mimeType || preferred?.type || "audio/mp4";
         return { url: preferred.url as string, mime };
       }
     } catch (e) {
@@ -65,28 +63,28 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
     }
   }
 
-  // Strategy B: Try multiple Invidious instances
+  // Strategy B: Invidious JSON
   const invidiousHosts = [
-    'https://yewtu.be',
-    'https://vid.puffyan.us',
-    'https://invidious.flokinet.to',
-    'https://invidious.nerdvpn.de',
-    'https://invidious.jing.rocks',
+    "https://yewtu.be",
+    "https://vid.puffyan.us",
+    "https://invidious.flokinet.to",
+    "https://invidious.nerdvpn.de",
+    "https://invidious.jing.rocks",
   ];
   for (const host of invidiousHosts) {
     try {
       const data = await fetchJsonSafe(`${host}/api/v1/videos/${videoId}`);
       const adaptive = data?.adaptiveFormats || data?.formatStreams || [];
       const candidates = adaptive.filter((f: any) =>
-        String(f?.type || f?.mimeType || '').toLowerCase().includes('audio')
+        String(f?.type || f?.mimeType || "").toLowerCase().includes("audio")
       );
       const preferred =
-        candidates.find((f: any) => /audio\/mp4|m4a/i.test(f?.type || f?.mimeType || '')) ||
-        candidates.find((f: any) => /audio\/webm/i.test(f?.type || f?.mimeType || '')) ||
+        candidates.find((f: any) => /audio\/mp4|m4a/i.test(f?.type || f?.mimeType || "")) ||
+        candidates.find((f: any) => /audio\/webm/i.test(f?.type || f?.mimeType || "")) ||
         candidates[0];
       const url = preferred?.url || preferred?.url_signature || preferred?.link;
       if (url) {
-        const mime = (preferred?.type || preferred?.mimeType || 'audio/mp4').split(';')[0];
+        const mime = (preferred?.type || preferred?.mimeType || "audio/mp4").split(";")[0];
         return { url, mime };
       }
     } catch (e) {
@@ -95,43 +93,77 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
     }
   }
 
-  // Strategy C: Parse watch page (best-effort, often signatureCipher only)
+  // Strategy C: Invidious latest_version endpoint (direct stream by itag)
+  const latestVersionItags = [140, 251]; // 140=m4a, 251=webm opus
+  for (const host of invidiousHosts) {
+    for (const itag of latestVersionItags) {
+      const url = `${host}/latest_version?id=${videoId}&itag=${itag}`;
+      try {
+        const head = await fetch(url, { method: "HEAD" });
+        if (head.ok) {
+          const mime = (head.headers.get("content-type") || "").split(";")[0] || (itag === 140 ? "audio/mp4" : "audio/webm");
+          return { url, mime };
+        }
+      } catch (e) {
+        console.warn(`latest_version failed ${host} itag=${itag}:`, e);
+      }
+    }
+  }
+
+  // Strategy D: Watch page parse (best-effort; might lack direct url)
   try {
     const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const res = await fetch(watchUrl, {
       headers: {
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'accept-language': 'en-US,en;q=0.9',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
-        'cache-control': 'no-cache',
-        'pragma': 'no-cache',
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "accept-language": "en-US,en;q=0.9",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
+        "cache-control": "no-cache",
+        pragma: "no-cache",
       },
     });
     const html = await res.text();
-    const match = html.match(/ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\})\s*;\s*var|ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\})\s*;/);
-    const jsonStr = match ? (match[1] || match[2]) : null;
-    if (jsonStr) {
-      const json = JSON.parse(jsonStr);
-      const adaptive = json?.streamingData?.adaptiveFormats || [];
-      const candidates = adaptive.filter((f: any) => String(f.mimeType || '').includes('audio'));
-      const direct = candidates.find((f: any) => !!f.url);
-      if (direct?.url) {
-        const mime = String(direct.mimeType || '').split(';')[0] || 'audio/mp4';
-        return { url: direct.url as string, mime };
+
+    // Robustly extract JSON by balancing braces from marker position
+    const marker = "ytInitialPlayerResponse";
+    const idx = html.indexOf(marker);
+    if (idx !== -1) {
+      const start = html.indexOf("{", idx);
+      if (start !== -1) {
+        let depth = 0;
+        let end = start;
+        for (; end < html.length; end++) {
+          const ch = html[end];
+          if (ch === "{") depth++;
+          else if (ch === "}") {
+            depth--;
+            if (depth === 0) {
+              end++;
+              break;
+            }
+          }
+        }
+        const jsonStr = html.slice(start, end);
+        const json = JSON.parse(jsonStr);
+        const adaptive = json?.streamingData?.adaptiveFormats || [];
+        const direct = adaptive.find((f: any) => String(f.mimeType || "").includes("audio") && !!f.url);
+        if (direct?.url) {
+          const mime = String(direct.mimeType || "").split(";")[0] || "audio/mp4";
+          return { url: direct.url as string, mime };
+        }
       }
     }
   } catch (e) {
-    console.warn('Watch page parse fallback failed:', e);
+    console.warn("Watch page parse fallback failed:", e);
   }
 
   return null;
 }
 
-async function downloadAudio(url: string, maxBytes = 25 * 1024 * 1024): Promise<Uint8Array> {
-  // HEAD to verify size when possible
+async function downloadAudio(url: string, maxBytes = 32 * 1024 * 1024): Promise<Uint8Array> {
   try {
-    const head = await fetch(url, { method: 'HEAD' });
-    const len = head.headers.get('content-length');
+    const head = await fetch(url, { method: "HEAD" });
+    const len = head.headers.get("content-length");
     if (len && Number(len) > maxBytes) {
       throw new Error(`Audio too large: ${len} bytes`);
     }
@@ -151,7 +183,7 @@ function uint8ToBlob(u8: Uint8Array, type: string): Blob {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
@@ -159,33 +191,39 @@ serve(async (req) => {
     const { videoUrl, videoId: rawId } = await req.json();
     const videoId = extractVideoId(videoUrl || rawId);
     if (!videoId) {
-      return new Response(JSON.stringify({ success: false, error: 'Missing or invalid video URL/ID' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Missing or invalid video URL/ID" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const audio = await getYouTubeAudioUrl(videoId);
     if (!audio) {
-      return new Response(JSON.stringify({ success: false, error: 'Could not resolve audio stream for this video.' }), {
-        status: 422,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "Could not resolve audio stream for this video." }),
+        {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const bytes = await downloadAudio(audio.url);
-    const blob = uint8ToBlob(bytes, audio.mime || 'audio/mp4');
+    const blob = uint8ToBlob(bytes, audio.mime || "audio/mp4");
 
     const form = new FormData();
-    form.append('file', blob, `audio.${audio.mime?.includes('webm') ? 'webm' : 'mp4'}`);
-    form.append('model', 'whisper-1');
+    form.append("file", blob, `audio.${audio.mime?.includes("webm") ? "webm" : "mp4"}`);
+    form.append("model", "whisper-1");
 
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openAIApiKey) throw new Error('OPENAI_API_KEY is not set');
+    const openAIApiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openAIApiKey) throw new Error("OPENAI_API_KEY is not set");
 
-    const stt = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${openAIApiKey}` },
+    const stt = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${openAIApiKey}` },
       body: form,
     });
 
@@ -195,17 +233,23 @@ serve(async (req) => {
     }
 
     const result = await stt.json();
-    const text: string = result.text || '';
+    const text: string = result.text || "";
     const title = await fetchVideoTitle(videoId);
 
-    return new Response(JSON.stringify({ success: true, transcript: text, videoTitle: title }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({ success: true, transcript: text, videoTitle: title }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error: any) {
-    console.error('whisper-transcribe error:', error);
-    return new Response(JSON.stringify({ success: false, error: String(error?.message || error) }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error("whisper-transcribe error:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: String(error?.message || error) }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
