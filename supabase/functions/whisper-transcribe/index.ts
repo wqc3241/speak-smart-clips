@@ -28,23 +28,36 @@ async function fetchVideoTitle(videoId: string): Promise<string> {
 }
 
 async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime: string } | null> {
-  // Helper to safely parse JSON-only responses
-  const fetchJsonSafe = async (url: string) => {
-    const resp = await fetch(url, { headers: { accept: "application/json" } });
-    const ct = resp.headers.get("content-type") || "";
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    if (!ct.includes("application/json")) throw new Error(`Non-JSON response: ${ct}`);
-    return await resp.json();
+  const fetchJsonSafe = async (url: string, timeoutMs = 4000) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const resp = await fetch(url, { headers: { accept: "application/json" }, signal: controller.signal });
+      const ct = resp.headers.get("content-type") || "";
+      if (!resp.ok) return null;
+      if (!ct.includes("application/json")) return null;
+      return await resp.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const TIMEOUT_MS = 4000;
+  const shuffle = <T,>(arr: T[]): T[] => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
   };
 
   // Strategy A: Try multiple Piped instances (JSON)
-  const pipedHosts = [
-    "https://piped.video",
+  const pipedHosts = [...shuffle([
     "https://pipedapi.kavin.rocks",
     "https://piped.projectsegfau.lt",
     "https://piped.privacydev.net",
     "https://pi.ggtyler.dev",
-  ];
+  ]), "https://piped.video"];
   for (const host of pipedHosts) {
     try {
       const data = await fetchJsonSafe(`${host}/api/v1/streams/${videoId}`);
@@ -58,18 +71,21 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
         return { url: preferred.url as string, mime };
       }
     } catch (e) {
-      console.warn(`Piped host failed ${host}:`, e);
+      console.debug(`Piped host failed ${host}:`, e);
       continue;
     }
   }
 
   // Strategy B: Invidious JSON
   const invidiousHosts = [
+    ...shuffle([
+      "https://invidious.flokinet.to",
+      "https://vid.puffyan.us",
+      "https://invidious.nerdvpn.de",
+      "https://invidious.jing.rocks",
+    ]),
+    // Place rate-limited host last
     "https://yewtu.be",
-    "https://vid.puffyan.us",
-    "https://invidious.flokinet.to",
-    "https://invidious.nerdvpn.de",
-    "https://invidious.jing.rocks",
   ];
   for (const host of invidiousHosts) {
     try {
@@ -88,7 +104,7 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
         return { url, mime };
       }
     } catch (e) {
-      console.warn(`Invidious host failed ${host}:`, e);
+      console.debug(`Invidious host failed ${host}:`, e);
       continue;
     }
   }
@@ -99,13 +115,19 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
     for (const itag of latestVersionItags) {
       const url = `${host}/latest_version?id=${videoId}&itag=${itag}`;
       try {
-        const head = await fetch(url, { method: "HEAD" });
-        if (head.ok) {
-          const mime = (head.headers.get("content-type") || "").split(";")[0] || (itag === 140 ? "audio/mp4" : "audio/webm");
-          return { url, mime };
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+        try {
+          const head = await fetch(url, { method: "HEAD", signal: controller.signal });
+          if (head.ok) {
+            const mime = (head.headers.get("content-type") || "").split(";")[0] || (itag === 140 ? "audio/mp4" : "audio/webm");
+            return { url, mime };
+          }
+        } finally {
+          clearTimeout(timer);
         }
       } catch (e) {
-        console.warn(`latest_version failed ${host} itag=${itag}:`, e);
+        console.debug(`latest_version failed ${host} itag=${itag}:`, e);
       }
     }
   }
