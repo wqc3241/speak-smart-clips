@@ -58,17 +58,17 @@ const Index = () => {
       console.warn('youtube-transcript failed:', err);
     }
 
-    // 2) Fallback to existing Edge Function (temporary)
+    // 2) Fallback: Whisper-only edge function (audio transcription)
     try {
-      const { data, error } = await supabase.functions.invoke('extract-transcript', {
+      const { data, error } = await supabase.functions.invoke('whisper-transcribe', {
         body: { videoId }
       });
-      if (error) throw new Error(error.message || 'Failed to extract transcript');
-      if (!data.success) throw new Error(data.error || 'Failed to extract transcript');
+      if (error) throw new Error(error.message || 'Failed to transcribe audio');
+      if (!data.success) throw new Error(data.error || 'Failed to transcribe audio');
       return {
         transcript: data.transcript,
         videoTitle: data.videoTitle,
-        captionsAvailable: data.captionsAvailable
+        captionsAvailable: false,
       };
     } catch (error: any) {
       console.error('All methods failed:', error);

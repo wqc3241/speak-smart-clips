@@ -1,1 +1,4 @@
 project_id = "evmamwdmwogmlezndueg"
+
+[functions.whisper-transcribe]
+verify_jwt = false
