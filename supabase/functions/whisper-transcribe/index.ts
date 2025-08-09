@@ -5,6 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+const VERBOSE = Deno.env.get("VERBOSE_AUDIO_RESOLVER") === "true";
 
 function extractVideoId(input: string): string | null {
   try {
@@ -37,6 +38,8 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
       if (!resp.ok) return null;
       if (!ct.includes("application/json")) return null;
       return await resp.json();
+    } catch (_e) {
+      return null;
     } finally {
       clearTimeout(timer);
     }
@@ -71,7 +74,7 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
         return { url: preferred.url as string, mime };
       }
     } catch (e) {
-      console.debug(`Piped host failed ${host}:`, e);
+      if (VERBOSE) console.debug(`Piped host failed ${host}:`, e);
       continue;
     }
   }
@@ -104,7 +107,7 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
         return { url, mime };
       }
     } catch (e) {
-      console.debug(`Invidious host failed ${host}:`, e);
+      if (VERBOSE) console.debug(`Invidious host failed ${host}:`, e);
       continue;
     }
   }
@@ -127,7 +130,7 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
           clearTimeout(timer);
         }
       } catch (e) {
-        console.debug(`latest_version failed ${host} itag=${itag}:`, e);
+        if (VERBOSE) console.debug(`latest_version failed ${host} itag=${itag}:`, e);
       }
     }
   }
@@ -135,16 +138,24 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
   // Strategy D: Watch page parse (best-effort; might lack direct url)
   try {
     const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const res = await fetch(watchUrl, {
-      headers: {
-        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "accept-language": "en-US,en;q=0.9",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
-        "cache-control": "no-cache",
-        pragma: "no-cache",
-      },
-    });
-    const html = await res.text();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    let html = "";
+    try {
+      const res = await fetch(watchUrl, {
+        headers: {
+          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+          "accept-language": "en-US,en;q=0.9",
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
+          "cache-control": "no-cache",
+          pragma: "no-cache",
+        },
+        signal: controller.signal,
+      });
+      html = await res.text();
+    } finally {
+      clearTimeout(timer);
+    }
 
     // Robustly extract JSON by balancing braces from marker position
     const marker = "ytInitialPlayerResponse";
@@ -176,9 +187,14 @@ async function getYouTubeAudioUrl(videoId: string): Promise<{ url: string; mime:
       }
     }
   } catch (e) {
-    console.warn("Watch page parse fallback failed:", e);
+    if (VERBOSE) console.debug("Watch page parse fallback failed:", e);
   }
 
+  if (!VERBOSE) {
+    console.log(`Audio resolution failed after all strategies for video ${videoId}`);
+  } else {
+    console.debug(`Audio resolution failed after all strategies for video ${videoId}`);
+  }
   return null;
 }
 
