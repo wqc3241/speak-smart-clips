@@ -29,9 +29,46 @@ const Index = () => {
   };
 
   const fetchTranscript = async (videoId: string) => {
-    // 1) Try client-side transcript first (works for manual/auto captions)
+    // 1) Try server-side extract-transcript first (most reliable)
     try {
-      console.log('Trying youtube-transcript for:', videoId);
+      console.log('Trying extract-transcript edge function for:', videoId);
+      const { data, error } = await supabase.functions.invoke('extract-transcript', {
+        body: { videoId }
+      });
+      if (!error && data?.success && data.transcript) {
+        console.log('✓ Successfully extracted transcript via extract-transcript');
+        return {
+          transcript: data.transcript,
+          videoTitle: data.videoTitle || `Video Lesson - ${videoId}`,
+          captionsAvailable: data.captionsAvailable || false,
+        };
+      }
+      console.warn('extract-transcript failed or returned no transcript:', data?.error);
+    } catch (err) {
+      console.warn('extract-transcript edge function failed:', err);
+    }
+
+    // 2) Fallback: Whisper-only edge function (audio transcription)
+    try {
+      console.log('Trying whisper-transcribe fallback for:', videoId);
+      const { data, error } = await supabase.functions.invoke('whisper-transcribe', {
+        body: { videoId }
+      });
+      if (error) throw new Error(error.message || 'Failed to transcribe audio');
+      if (!data.success) throw new Error(data.error || 'Failed to transcribe audio');
+      console.log('✓ Successfully transcribed audio via whisper-transcribe');
+      return {
+        transcript: data.transcript,
+        videoTitle: data.videoTitle,
+        captionsAvailable: false,
+      };
+    } catch (error: any) {
+      console.warn('whisper-transcribe failed:', error);
+    }
+
+    // 3) Last resort: Try client-side transcript (limited by CORS)
+    try {
+      console.log('Trying client-side youtube-transcript for:', videoId);
       let segments: any[] | null = null;
       try {
         segments = await (YoutubeTranscript as any).fetchTranscript(videoId, { lang: 'en' });
@@ -52,28 +89,15 @@ const Index = () => {
         } catch (e) {
           console.warn('Title fetch failed, using default.', e);
         }
+        console.log('✓ Successfully extracted transcript via client-side youtube-transcript');
         return { transcript, videoTitle, captionsAvailable: true };
       }
     } catch (err) {
       console.warn('youtube-transcript failed:', err);
     }
 
-    // 2) Fallback: Whisper-only edge function (audio transcription)
-    try {
-      const { data, error } = await supabase.functions.invoke('whisper-transcribe', {
-        body: { videoId }
-      });
-      if (error) throw new Error(error.message || 'Failed to transcribe audio');
-      if (!data.success) throw new Error(data.error || 'Failed to transcribe audio');
-      return {
-        transcript: data.transcript,
-        videoTitle: data.videoTitle,
-        captionsAvailable: false,
-      };
-    } catch (error: any) {
-      console.error('All methods failed:', error);
-      throw new Error(error.message || 'Could not extract transcript from this video');
-    }
+    console.error('All transcript extraction methods failed for video:', videoId);
+    throw new Error('Could not extract transcript from this video. Please try a different video or check if it has captions available.');
   };
 
   const analyzeContent = (script: string) => {
