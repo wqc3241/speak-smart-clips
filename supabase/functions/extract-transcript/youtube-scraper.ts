@@ -67,6 +67,31 @@ export async function tryYouTubeDataAPI(videoId: string, apiKey: string): Promis
   }
 }
 
+// Retry helper function with exponential backoff
+async function fetchWithRetry(url: string, headers: any, maxRetries = 3): Promise<Response> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, { headers });
+      
+      // If rate limited (429), wait and retry
+      if (response.status === 429 && attempt < maxRetries) {
+        const waitTime = Math.min(1000 * Math.pow(2, attempt), 10000); // Exponential backoff, max 10s
+        console.log(`=== RETRY: Rate limited (429), waiting ${waitTime}ms before retry ${attempt}/${maxRetries}`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+      
+      return response;
+    } catch (error) {
+      if (attempt === maxRetries) throw error;
+      const waitTime = 1000 * attempt;
+      console.log(`=== RETRY: Request failed, waiting ${waitTime}ms before retry ${attempt}/${maxRetries}`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
 export async function extractYouTubeSubtitles(videoId: string): Promise<string | null> {
   try {
     console.log('=== SUBTITLE DEBUG: Starting subtitle extraction for video:', videoId);
@@ -94,13 +119,16 @@ export async function extractYouTubeSubtitles(videoId: string): Promise<string |
     
     console.log('=== SUBTITLE DEBUG: Request headers prepared');
     
-    const pageResponse = await fetch(videoPageUrl, { headers });
+    const pageResponse = await fetchWithRetry(videoPageUrl, headers, 3);
 
     console.log('=== SUBTITLE DEBUG: Response status:', pageResponse.status);
     console.log('=== SUBTITLE DEBUG: Response headers:', Object.fromEntries(pageResponse.headers.entries()));
 
     if (!pageResponse.ok) {
       console.log('=== SUBTITLE DEBUG: Failed to fetch video page, status:', pageResponse.status);
+      if (pageResponse.status === 429) {
+        throw new Error('YouTube is rate limiting requests. Please wait a few minutes and try again.');
+      }
       throw new Error(`Failed to fetch video page: ${pageResponse.status}`);
     }
 

@@ -97,7 +97,7 @@ const Index = () => {
     }
 
     console.error('All transcript extraction methods failed for video:', videoId);
-    throw new Error('Could not extract transcript from this video. Please try a different video or check if it has captions available.');
+    throw new Error('Could not extract transcript. This may be due to:\n• YouTube rate limiting (try again in a few minutes)\n• Video has no captions available\n• Video is private or restricted\n\nTry a different video with captions enabled.');
   };
 
   const analyzeContent = (script: string) => {

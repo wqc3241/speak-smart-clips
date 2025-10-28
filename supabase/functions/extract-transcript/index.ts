@@ -139,16 +139,30 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in extract-transcript function:', error);
     
+    // Determine user-friendly error message and suggestion
+    let errorMessage = error.message || 'Failed to extract transcript';
+    let suggestion = 'Please check that the video URL is valid and try again.';
+    let statusCode = 500;
+    
+    if (error.message.includes('rate limiting') || error.message.includes('429')) {
+      errorMessage = 'YouTube is temporarily blocking requests. Please wait a few minutes and try again.';
+      suggestion = 'This video cannot be processed right now due to YouTube rate limits. Try again in 5-10 minutes, or try a different video.';
+      statusCode = 429;
+    } else if (error.message.includes('API key')) {
+      suggestion = 'Please configure your OpenAI API key in the project settings.';
+    } else if (error.message.includes('captions') || error.message.includes('subtitle')) {
+      errorMessage = 'This video does not have captions available.';
+      suggestion = 'Please try a different video that has captions or subtitles enabled. Educational videos and popular channels typically have captions.';
+    }
+    
     const result: TranscriptResult = {
       success: false,
-      error: error.message || 'Failed to extract transcript',
-      suggestion: error.message.includes('API key') ? 
-        'Please configure your OpenAI API key in the project settings.' : 
-        'Please check that the video URL is valid and try again.'
+      error: errorMessage,
+      suggestion
     };
 
     return new Response(JSON.stringify(result), {
-      status: 500,
+      status: statusCode,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
