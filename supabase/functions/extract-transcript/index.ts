@@ -1,70 +1,79 @@
 
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { CORS_HEADERS, TranscriptResult } from './types.ts';
-import { tryYouTubeDataAPI, extractYouTubeSubtitles } from './youtube-scraper.ts';
-import { transcribeWithWhisper } from './whisper-transcriber.ts';
+
+async function extractWithSupadata(videoId: string): Promise<string | null> {
+  const supadataApiKey = Deno.env.get('SUPADATA_API_KEY');
+  if (!supadataApiKey) {
+    console.error('=== SUPADATA: API key not configured');
+    throw new Error('Supadata API key not configured');
+  }
+
+  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  console.log('=== SUPADATA: Extracting transcript for:', videoUrl);
+
+  try {
+    const response = await fetch(`https://api.supadata.ai/v1/transcript?url=${encodeURIComponent(videoUrl)}`, {
+      method: 'GET',
+      headers: {
+        'x-api-key': supadataApiKey,
+      },
+    });
+
+    console.log('=== SUPADATA: Response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('=== SUPADATA: API error:', response.status, errorText);
+      
+      if (response.status === 404) {
+        throw new Error('This video does not have captions available or cannot be accessed');
+      } else if (response.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again in a few minutes');
+      } else if (response.status === 401 || response.status === 403) {
+        throw new Error('API authentication failed');
+      }
+      
+      throw new Error(`Failed to extract transcript: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('=== SUPADATA: Response received, processing transcript...');
+
+    // Supadata returns transcript in content array with segments
+    if (data.content && Array.isArray(data.content)) {
+      const transcript = data.content
+        .map((segment: any) => segment.text || segment.content || '')
+        .filter((text: string) => text.trim().length > 0)
+        .join(' ');
+      
+      console.log('=== SUPADATA: Successfully extracted transcript, length:', transcript.length);
+      return transcript;
+    }
+
+    console.log('=== SUPADATA: No content found in response');
+    return null;
+  } catch (error) {
+    console.error('=== SUPADATA: Error:', error);
+    throw error;
+  }
+}
 
 async function extractTranscript(videoId: string): Promise<string> {
   try {
-    console.log('=== DEBUG: Starting transcript extraction for video:', videoId);
-    console.log('=== DEBUG: Video URL would be: https://www.youtube.com/watch?v=' + videoId);
+    console.log('=== Starting transcript extraction for video:', videoId);
     
-    // Test with known working English video first if this is the problematic video
-    const testVideoIds = ['dQw4w9WgXcQ', 'jNQXAC9IVRw', 'L_jWHffIx5E']; // Known English videos with captions
-    const isTestVideo = testVideoIds.includes(videoId);
+    // Try Supadata API first
+    const transcript = await extractWithSupadata(videoId);
     
-    if (isTestVideo) {
-      console.log('=== DEBUG: Testing with known English video that should have captions');
-    } else {
-      console.log('=== DEBUG: Processing user-provided video:', videoId);
-    }
-    
-    // First try YouTube Data API if available
-    const youtubeApiKey = Deno.env.get('YOUTUBE_API_KEY');
-    if (youtubeApiKey) {
-      console.log('=== DEBUG: Trying YouTube Data API for captions...');
-      const transcript = await tryYouTubeDataAPI(videoId, youtubeApiKey);
-      if (transcript && transcript.length > 50) {
-        console.log('=== DEBUG: Successfully extracted via YouTube Data API, length:', transcript.length);
-        return transcript;
-      } else {
-        console.log('=== DEBUG: YouTube Data API returned empty or short transcript');
-      }
-    } else {
-      console.log('=== DEBUG: No YouTube API key configured, skipping Data API');
+    if (transcript && transcript.length > 50) {
+      console.log('=== Successfully extracted transcript via Supadata');
+      return transcript;
     }
 
-    // Try direct subtitle extraction with comprehensive debugging
-    console.log('=== DEBUG: Trying direct subtitle extraction...');
-    const subtitleTranscript = await extractYouTubeSubtitles(videoId);
-    if (subtitleTranscript && subtitleTranscript.length > 50) {
-      console.log('=== DEBUG: Successfully extracted subtitles, length:', subtitleTranscript.length);
-      console.log('=== DEBUG: Subtitle preview:', subtitleTranscript.substring(0, 200) + '...');
-      return subtitleTranscript;
-    } else {
-      console.log('=== DEBUG: Direct subtitle extraction failed or returned short content');
-      console.log('=== DEBUG: Subtitle result length:', subtitleTranscript?.length || 0);
-    }
-
-    // If no subtitles found, use Whisper to transcribe audio
-    console.log('=== DEBUG: No subtitles found, attempting Whisper audio transcription...');
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openAIApiKey) {
-      console.log('=== DEBUG: No OpenAI API key configured');
-      throw new Error('OpenAI API key not configured. Please add your OpenAI API key to use audio transcription.');
-    }
-
-    console.log('=== DEBUG: Starting Whisper transcription...');
-    return await transcribeWithWhisper(videoId, openAIApiKey);
-    
+    throw new Error('Could not extract transcript - no content returned');
   } catch (error) {
-    console.error('=== DEBUG: Transcript extraction error:', error);
-    console.error('=== DEBUG: Error details:', {
-      message: error.message,
-      name: error.name,
-      stack: error.stack?.substring(0, 500)
-    });
+    console.error('=== Transcript extraction error:', error);
     throw error;
   }
 }
@@ -79,34 +88,13 @@ serve(async (req) => {
   }
 
   try {
-    const { videoId, testMode } = await req.json();
+    const { videoId } = await req.json();
 
     if (!videoId) {
       throw new Error('Video ID is required');
     }
 
-    console.log('=== DEBUG: Extracting transcript for video ID:', videoId);
-    console.log('=== DEBUG: Test mode enabled:', !!testMode);
-    
-    // If test mode, try with known working videos first
-    if (testMode) {
-      console.log('=== DEBUG: Test mode - trying known working English videos first');
-      const testVideoIds = ['dQw4w9WgXcQ', 'jNQXAC9IVRw', 'L_jWHffIx5E'];
-      
-      for (const testId of testVideoIds) {
-        try {
-          console.log('=== DEBUG: Testing with video:', testId);
-          const testTranscript = await extractTranscript(testId);
-          if (testTranscript && testTranscript.length > 50) {
-            console.log('=== DEBUG: ✅ Test video worked! Method is functional.');
-            console.log('=== DEBUG: Now trying original video:', videoId);
-            break;
-          }
-        } catch (error) {
-          console.log('=== DEBUG: ❌ Test video failed:', testId, error.message);
-        }
-      }
-    }
+    console.log('=== Extracting transcript for video ID:', videoId);
 
     const videoTitle = getVideoTitle(videoId);
     const transcript = await extractTranscript(videoId);
@@ -129,7 +117,7 @@ serve(async (req) => {
       videoTitle,
       transcript,
       captionsAvailable: true,
-      transcriptionMethod: transcript.includes('transcribed') ? 'whisper' : 'captions'
+      transcriptionMethod: 'supadata'
     };
 
     return new Response(JSON.stringify(result), {
@@ -144,15 +132,16 @@ serve(async (req) => {
     let suggestion = 'Please check that the video URL is valid and try again.';
     let statusCode = 500;
     
-    if (error.message.includes('rate limiting') || error.message.includes('429')) {
-      errorMessage = 'YouTube is temporarily blocking requests. Please wait a few minutes and try again.';
-      suggestion = 'This video cannot be processed right now due to YouTube rate limits. Try again in 5-10 minutes, or try a different video.';
+    if (error.message.includes('Rate limit') || error.message.includes('429')) {
+      errorMessage = 'Rate limit exceeded. Please try again in a few minutes.';
+      suggestion = 'The transcript service is temporarily rate limited. Wait a few minutes and try again.';
       statusCode = 429;
-    } else if (error.message.includes('API key')) {
-      suggestion = 'Please configure your OpenAI API key in the project settings.';
-    } else if (error.message.includes('captions') || error.message.includes('subtitle')) {
+    } else if (error.message.includes('API key') || error.message.includes('authentication')) {
+      errorMessage = 'API configuration error';
+      suggestion = 'Please contact support - the transcript service is not properly configured.';
+    } else if (error.message.includes('captions') || error.message.includes('cannot be accessed')) {
       errorMessage = 'This video does not have captions available.';
-      suggestion = 'Please try a different video that has captions or subtitles enabled. Educational videos and popular channels typically have captions.';
+      suggestion = 'Please try a different video that has captions or subtitles enabled.';
     }
     
     const result: TranscriptResult = {
