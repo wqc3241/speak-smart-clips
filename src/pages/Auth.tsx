@@ -16,14 +16,20 @@ const passwordSchema = z.string()
   .min(6, "Password must be at least 6 characters")
   .max(72, "Password must be less than 72 characters");
 
+// Parse URL hash to check if this is a password recovery link
+const checkForRecoveryToken = () => {
+  const hashParams = new URLSearchParams(window.location.hash.substring(1));
+  return hashParams.get('type') === 'recovery';
+};
+
 const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
 
-  // Password recovery state
-  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  // Password recovery state - initialize based on URL hash
+  const [isRecoveryMode, setIsRecoveryMode] = useState(checkForRecoveryToken());
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   
