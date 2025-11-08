@@ -22,6 +22,11 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
 
+  // Password recovery state
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+
   // Form state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,16 +40,29 @@ const Auth = () => {
     confirmPassword?: string;
   }>({});
 
-  // Check if already logged in
+  // Check if already logged in and detect password recovery
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
+      if (session && !isRecoveryMode) {
         navigate("/");
       }
     };
     checkSession();
-  }, [navigate]);
+
+    // Listen for password recovery event
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsRecoveryMode(true);
+        } else if (event === 'SIGNED_IN' && session) {
+          navigate("/");
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, [navigate, isRecoveryMode]);
 
   const validateForm = () => {
     const newErrors: typeof errors = {};
@@ -152,6 +170,53 @@ const Auth = () => {
     }
   };
 
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validate passwords
+    const passwordResult = passwordSchema.safeParse(newPassword);
+    if (!passwordResult.success) {
+      toast({
+        title: "Invalid password",
+        description: passwordResult.error.errors[0].message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast({
+        title: "Passwords don't match",
+        description: "Please make sure both passwords are the same.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      toast({
+        title: "Password reset failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Password updated!",
+        description: "Your password has been successfully reset. You can now sign in.",
+      });
+      setIsRecoveryMode(false);
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setMode("signin");
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-blue-50 p-4">
       <Card className="w-full max-w-md">
@@ -159,17 +224,63 @@ const Auth = () => {
           <div className="flex justify-center mb-4">
             <BookOpen className="w-12 h-12 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-bold">Language Learning Platform</CardTitle>
+          <CardTitle className="text-2xl font-bold">
+            {isRecoveryMode ? "Reset Your Password" : "Language Learning Platform"}
+          </CardTitle>
           <CardDescription>
-            Sign in to access your learning projects
+            {isRecoveryMode 
+              ? "Enter your new password below" 
+              : "Sign in to access your learning projects"}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs value={mode} onValueChange={(v) => setMode(v as typeof mode)}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-            </TabsList>
+          {isRecoveryMode ? (
+            // Password Reset Form
+            <form onSubmit={handlePasswordReset} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={loading}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirm-new-password">Confirm New Password</Label>
+                <Input
+                  id="confirm-new-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  disabled={loading}
+                  required
+                />
+              </div>
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Updating password...
+                  </>
+                ) : (
+                  "Reset Password"
+                )}
+              </Button>
+            </form>
+          ) : (
+            <>
+            <Tabs value={mode} onValueChange={(v) => setMode(v as typeof mode)}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="signin">Sign In</TabsTrigger>
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              </TabsList>
 
             {/* Sign In Tab */}
             <TabsContent value="signin">
@@ -334,6 +445,8 @@ const Auth = () => {
             </svg>
             Sign in with Google
           </Button>
+          </>
+          )}
         </CardContent>
       </Card>
     </div>
