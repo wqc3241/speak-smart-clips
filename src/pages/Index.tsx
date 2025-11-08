@@ -32,7 +32,6 @@ const Index = () => {
   const [processingStep, setProcessingStep] = useState<string>('');
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [availableLanguages, setAvailableLanguages] = useState<any[]>([]);
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
   const [pendingVideoId, setPendingVideoId] = useState<string>('');
@@ -443,10 +442,10 @@ const Index = () => {
       const { transcript, videoTitle } = await fetchTranscript(videoId, languageCode);
       
       setProcessingStep('Analyzing content with AI...');
-      const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(transcript);
+      const { vocabulary, grammar } = await analyzeContentWithAI(transcript);
       
       setProcessingStep('Generating practice sentences...');
-      const practiceSentences = await generatePracticeSentences(vocabulary, grammar, detectedLanguage);
+      const practiceSentences = await generatePracticeSentences(vocabulary, grammar, selectedLanguage);
       
       const project = {
         id: Date.now(),
@@ -455,7 +454,7 @@ const Index = () => {
         script: transcript,
         vocabulary,
         grammar,
-        detectedLanguage,
+        detectedLanguage: selectedLanguage,
         practiceSentences
       };
       
@@ -464,7 +463,7 @@ const Index = () => {
       
       toast({
         title: "Video processed successfully!",
-        description: `Your lesson is ready for study. Language: ${detectedLanguage}`,
+        description: `Your lesson is ready for study. Language: ${selectedLanguage}`,
       });
     } catch (error: any) {
       toast({
@@ -497,28 +496,37 @@ const Index = () => {
       return;
     }
 
+    // Show language selector immediately
+    setPendingVideoId(videoId);
+    setShowLanguageSelector(true);
+    setSelectedLanguage('');
+  };
+
+  const handleLanguageSelected = async () => {
+    if (!pendingVideoId || !selectedLanguage) return;
+    
+    setShowLanguageSelector(false);
     setIsProcessing(true);
-    setProcessingStep('Analyzing video...');
+    setProcessingStep('Extracting transcript...');
     
     try {
-      console.log('Processing YouTube URL:', youtubeUrl);
+      // Map the language name to language code for transcript extraction
+      const languageCodeMap: { [key: string]: string } = {
+        'Japanese': 'ja',
+        'Chinese': 'zh',
+        'Korean': 'ko',
+        'Spanish': 'es',
+        'French': 'fr',
+        'German': 'de',
+        'Italian': 'it',
+        'Portuguese': 'pt',
+        'Russian': 'ru',
+        'Arabic': 'ar',
+        'Hindi': 'hi',
+      };
       
-      // Step 1: Fetch available languages
-      const languages = await fetchAvailableLanguages(videoId);
-      
-      // Step 2: If multiple languages available, show selector
-      if (languages && languages.length > 1) {
-        setAvailableLanguages(languages);
-        setPendingVideoId(videoId);
-        setShowLanguageSelector(true);
-        setIsProcessing(false);
-        setProcessingStep('');
-        return; // Wait for user to select language
-      }
-      
-      // Step 3: Extract transcript (with selected language if available)
-      const languageCode = languages && languages.length === 1 ? languages[0].code : undefined;
-      await continueProcessing(videoId, languageCode);
+      const languageCode = languageCodeMap[selectedLanguage];
+      await continueProcessing(pendingVideoId, languageCode);
       
     } catch (error: any) {
       console.error('Processing error:', error);
@@ -663,7 +671,7 @@ const Index = () => {
                 <CardHeader>
                   <CardTitle>Select Language</CardTitle>
                   <CardDescription>
-                    This video has multiple caption languages available. Please select your preferred language for learning.
+                    Choose the language you want to learn from this video
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -676,32 +684,34 @@ const Index = () => {
                         <SelectValue placeholder="Choose a language" />
                       </SelectTrigger>
                       <SelectContent>
-                        {availableLanguages.map((lang) => (
-                          <SelectItem key={lang.code} value={lang.code}>
-                            {lang.name} {lang.type === 'auto-generated' ? '(Auto)' : ''}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="Japanese">Japanese</SelectItem>
+                        <SelectItem value="Chinese">Chinese (Mandarin)</SelectItem>
+                        <SelectItem value="Korean">Korean</SelectItem>
+                        <SelectItem value="Spanish">Spanish</SelectItem>
+                        <SelectItem value="French">French</SelectItem>
+                        <SelectItem value="German">German</SelectItem>
+                        <SelectItem value="Italian">Italian</SelectItem>
+                        <SelectItem value="Portuguese">Portuguese</SelectItem>
+                        <SelectItem value="Russian">Russian</SelectItem>
+                        <SelectItem value="Arabic">Arabic</SelectItem>
+                        <SelectItem value="Hindi">Hindi</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
                       </SelectContent>
                     </Select>
                     
                     <div className="flex gap-2">
                       <Button
-                        onClick={() => {
-                          if (pendingVideoId && selectedLanguage) {
-                            continueProcessing(pendingVideoId, selectedLanguage);
-                          }
-                        }}
+                        onClick={handleLanguageSelected}
                         disabled={!selectedLanguage}
                         className="flex-1"
                       >
-                        Continue with Selected Language
+                        Continue
                       </Button>
                       <Button
                         variant="outline"
                         onClick={() => {
                           setShowLanguageSelector(false);
                           setSelectedLanguage('');
-                          setAvailableLanguages([]);
                           setPendingVideoId('');
                         }}
                       >
