@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { VideoPreview } from "@/components/VideoPreview";
 import { ScriptDisplay } from "@/components/ScriptDisplay";
 import { VocabularyPanel } from "@/components/VocabularyPanel";
-import { ConversationInterface } from "@/components/ConversationInterface";
+import { PracticeInterface } from "@/components/PracticeInterface";
 import { ProjectManager } from "@/components/ProjectManager";
 import { Youtube, BookOpen, MessageCircle, Save, History, TestTube, Beaker } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
@@ -445,7 +445,7 @@ const Index = () => {
 
           <TabsContent value="conversation" className="space-y-6">
             {currentProject ? (
-              <ConversationInterface project={currentProject} />
+              <PracticeInterface project={currentProject} />
             ) : (
               <Card className="text-center py-12">
                 <CardContent>
