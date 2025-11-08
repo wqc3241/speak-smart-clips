@@ -211,11 +211,12 @@ const Index = () => {
     try {
       console.log('Saving project to database...');
       
-      // Check if project with this URL already exists
+      // Check if project with this URL already exists for this user
       const { data: existing, error: checkError } = await supabase
         .from('projects')
         .select('id, title')
         .eq('youtube_url', currentProject.url)
+        .eq('user_id', user?.id)
         .maybeSingle();
       
       if (checkError && checkError.code !== 'PGRST116') {
