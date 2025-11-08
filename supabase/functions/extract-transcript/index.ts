@@ -2,14 +2,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { CORS_HEADERS, TranscriptResult } from './types.ts';
 
-async function extractWithSupadata(videoId: string): Promise<string | null> {
+async function extractWithSupadata(videoId: string, languageCode?: string): Promise<string | null> {
   const supadataApiKey = Deno.env.get('SUPADATA_API_KEY');
   if (!supadataApiKey) {
     console.error('=== SUPADATA: API key not configured');
     throw new Error('Supadata API key not configured');
   }
 
-  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  let videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  
+  // Add language parameter if provided
+  if (languageCode) {
+    videoUrl += `&lang=${languageCode}`;
+    console.log('=== SUPADATA: Requesting captions in language:', languageCode);
+  }
+  
   console.log('=== SUPADATA: Extracting transcript for:', videoUrl);
 
   try {
@@ -59,15 +66,88 @@ async function extractWithSupadata(videoId: string): Promise<string | null> {
   }
 }
 
+async function extractWithWhisper(videoId: string): Promise<{ transcript: string; language: string } | null> {
+  const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!openAIApiKey) {
+    console.error('=== WHISPER: API key not configured');
+    return null;
+  }
+
+  console.log('=== WHISPER: Detecting language for video:', videoId);
+
+  try {
+    const response = await fetch(
+      `${Deno.env.get('SUPABASE_URL')}/functions/v1/whisper-transcribe`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+        },
+        body: JSON.stringify({ videoId }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('=== WHISPER: API error:', response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (data.success && data.transcript && data.language) {
+      console.log('=== WHISPER: Detected language:', data.language, 'transcript length:', data.transcript.length);
+      return {
+        transcript: data.transcript,
+        language: data.language
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('=== WHISPER: Error:', error);
+    return null;
+  }
+}
+
 async function extractTranscript(videoId: string): Promise<string> {
   try {
     console.log('=== Starting transcript extraction for video:', videoId);
     
-    // Try Supadata API first
-    const transcript = await extractWithSupadata(videoId);
+    // Step 1: Use Whisper to detect language
+    let detectedLanguage: string | undefined;
+    try {
+      const whisperResult = await extractWithWhisper(videoId);
+      if (whisperResult) {
+        detectedLanguage = whisperResult.language;
+        console.log('=== Language detected via Whisper:', detectedLanguage);
+        
+        // Step 2: Try Supadata with the detected language
+        try {
+          const supadataTranscript = await extractWithSupadata(videoId, detectedLanguage);
+          if (supadataTranscript && supadataTranscript.length > 50) {
+            console.log('=== Successfully extracted transcript via Supadata with language:', detectedLanguage);
+            return supadataTranscript;
+          }
+        } catch (supadataError) {
+          console.warn('=== Supadata failed, falling back to Whisper transcript:', supadataError);
+        }
+        
+        // Step 3: If Supadata fails, use Whisper's transcript as fallback
+        if (whisperResult.transcript && whisperResult.transcript.length > 50) {
+          console.log('=== Using Whisper transcript as fallback');
+          return whisperResult.transcript;
+        }
+      }
+    } catch (whisperError) {
+      console.warn('=== Whisper failed, trying Supadata without language detection:', whisperError);
+    }
     
+    // Step 4: Final fallback - try Supadata without language parameter
+    const transcript = await extractWithSupadata(videoId);
     if (transcript && transcript.length > 50) {
-      console.log('=== Successfully extracted transcript via Supadata');
+      console.log('=== Successfully extracted transcript via Supadata (no language specified)');
       return transcript;
     }
 

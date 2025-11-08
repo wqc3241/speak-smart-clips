@@ -272,10 +272,11 @@ serve(async (req) => {
 
     const result = await stt.json();
     const text: string = result.text || "";
+    const language: string = result.language || "en"; // Whisper returns detected language
     const title = await fetchVideoTitle(videoId);
 
     return new Response(
-      JSON.stringify({ success: true, transcript: text, videoTitle: title }),
+      JSON.stringify({ success: true, transcript: text, videoTitle: title, language }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
