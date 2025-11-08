@@ -11,7 +11,7 @@ import { ScriptDisplay } from "@/components/ScriptDisplay";
 import { VocabularyPanel } from "@/components/VocabularyPanel";
 import { PracticeInterface } from "@/components/PracticeInterface";
 import { ProjectManager } from "@/components/ProjectManager";
-import { Youtube, BookOpen, MessageCircle, Save, History, TestTube, Beaker } from 'lucide-react';
+import { Youtube, BookOpen, MessageCircle, Save, History, TestTube, Beaker, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { YoutubeTranscript } from 'youtube-transcript';
@@ -27,6 +27,7 @@ const Index = () => {
   const [currentProject, setCurrentProject] = useState(null);
   const [activeTab, setActiveTab] = useState('input');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState<string>('');
   const [isTesting, setIsTesting] = useState(false);
   const { toast } = useToast();
 
@@ -313,6 +314,7 @@ const Index = () => {
     try {
       console.log('Using test data...');
       
+      setProcessingStep('Loading test transcript...');
       toast({
         title: "Loading test data",
         description: "Analyzing Japanese tennis racket video...",
@@ -322,10 +324,12 @@ const Index = () => {
       const transcript = TEST_TRANSCRIPT;
       
       // Still call AI analysis to test the analyze-content function
+      setProcessingStep('Analyzing content with AI...');
       console.log('Analyzing test content with AI...');
       const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(transcript);
       
       // Generate practice sentences automatically
+      setProcessingStep('Generating practice sentences...');
       const practiceSentences = await generatePracticeSentences(vocabulary, grammar, detectedLanguage);
       
       const project = {
@@ -341,6 +345,7 @@ const Index = () => {
       
       setCurrentProject(project);
       setActiveTab('lesson');
+      setProcessingStep('');
       
       toast({
         title: "Test data loaded successfully!",
@@ -349,6 +354,7 @@ const Index = () => {
       
     } catch (error) {
       console.error('Test data loading error:', error);
+      setProcessingStep('');
       toast({
         title: "Loading failed",
         description: error.message || "Could not load test data",
@@ -383,12 +389,15 @@ const Index = () => {
     try {
       console.log('Processing YouTube URL:', youtubeUrl);
       
+      setProcessingStep('Extracting transcript from video...');
       const { transcript, videoTitle } = await fetchTranscript(videoId);
       
+      setProcessingStep('Analyzing content with AI...');
       console.log('Analyzing content with AI...');
       const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(transcript);
       
       // Generate practice sentences automatically
+      setProcessingStep('Generating practice sentences...');
       const practiceSentences = await generatePracticeSentences(vocabulary, grammar, detectedLanguage);
       
       const project = {
@@ -404,6 +413,7 @@ const Index = () => {
       
       setCurrentProject(project);
       setActiveTab('lesson');
+      setProcessingStep('');
       
       toast({
         title: "Video processed successfully!",
@@ -412,6 +422,7 @@ const Index = () => {
       
     } catch (error) {
       console.error('Processing error:', error);
+      setProcessingStep('');
       toast({
         title: "Processing failed",
         description: error.message || "Could not process the video",
@@ -489,8 +500,25 @@ const Index = () => {
                   size="lg"
                   disabled={isProcessing}
                 >
-                  {isProcessing ? 'Processing...' : 'Process Video'}
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Youtube className="w-5 h-5 mr-2" />
+                      Process Video
+                    </>
+                  )}
                 </Button>
+                
+                {isProcessing && processingStep && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground animate-fade-in">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>{processingStep}</span>
+                  </div>
+                )}
                 
                 <div className="flex gap-2">
                   <Button 
@@ -500,8 +528,17 @@ const Index = () => {
                     disabled={isProcessing}
                     className="flex-1 gap-2"
                   >
-                    <Beaker className="w-4 h-4" />
-                    <span className="hidden sm:inline">Test Data</span>
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="hidden sm:inline">Loading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Beaker className="w-4 h-4" />
+                        <span className="hidden sm:inline">Test Data</span>
+                      </>
+                    )}
                   </Button>
                   <Button 
                     onClick={testAPIs} 
