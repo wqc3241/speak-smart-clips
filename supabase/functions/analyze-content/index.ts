@@ -60,21 +60,23 @@ serve(async (req) => {
 2. 5 important grammar patterns with examples from the text and explanations
 3. The language of the text
 
+IMPORTANT: Provide all definitions and explanations in ENGLISH (the learner's native language), but keep vocabulary words, grammar rule names, and grammar examples in the ORIGINAL LANGUAGE of the text.
+
 Return ONLY valid JSON in this exact format:
 {
   "detectedLanguage": "language name",
   "vocabulary": [
     {
-      "word": "word",
-      "definition": "clear definition in the same language",
+      "word": "word in the original language",
+      "definition": "clear definition in English",
       "difficulty": "beginner|intermediate|advanced"
     }
   ],
   "grammar": [
     {
-      "rule": "grammar rule name",
-      "example": "example from the text",
-      "explanation": "clear explanation in the same language"
+      "rule": "grammar rule name in the original language",
+      "example": "example from the text in the original language",
+      "explanation": "clear, detailed explanation in English that helps English speakers understand how this grammar pattern works"
     }
   ]
 }`
