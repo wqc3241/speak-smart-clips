@@ -1,40 +1,40 @@
-
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Book, GraduationCap } from 'lucide-react';
-
 interface VocabularyItem {
   word: string;
   definition: string;
   difficulty: 'beginner' | 'intermediate' | 'advanced';
 }
-
 interface GrammarItem {
   rule: string;
   example: string;
   explanation: string;
 }
-
 interface VocabularyPanelProps {
   vocabulary: VocabularyItem[];
   grammar: GrammarItem[];
 }
-
-export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, grammar }) => {
+export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
+  vocabulary,
+  grammar
+}) => {
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
-      case 'beginner': return 'bg-green-100 text-green-800';
-      case 'intermediate': return 'bg-yellow-100 text-yellow-800';
-      case 'advanced': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'beginner':
+        return 'bg-green-100 text-green-800';
+      case 'intermediate':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'advanced':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
-
-  return (
-    <div className="space-y-4">
+  return <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -45,8 +45,7 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
         <CardContent>
           <ScrollArea className="h-48">
             <div className="space-y-3">
-              {vocabulary.map((item, index) => (
-                <div key={index} className="p-3 bg-gray-50 rounded-lg">
+              {vocabulary.map((item, index) => <div key={index} className="p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-semibold text-lg">{item.word}</span>
                     <Badge className={getDifficultyColor(item.difficulty)}>
@@ -54,8 +53,7 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
                     </Badge>
                   </div>
                   <p className="text-sm text-gray-600">{item.definition}</p>
-                </div>
-              ))}
+                </div>)}
             </div>
           </ScrollArea>
         </CardContent>
@@ -63,16 +61,14 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-purple-500" />
+          <CardTitle className="flex items-center gap-2">Key Grammar<GraduationCap className="w-5 h-5 text-purple-500" />
             Grammar Points
           </CardTitle>
         </CardHeader>
         <CardContent>
           <ScrollArea className="h-48">
             <div className="space-y-3">
-              {grammar.map((item, index) => (
-                <div key={index} className="p-3 bg-gray-50 rounded-lg">
+              {grammar.map((item, index) => <div key={index} className="p-3 bg-gray-50 rounded-lg">
                   <h4 className="font-semibold text-base text-purple-700 mb-1">
                     {item.rule}
                   </h4>
@@ -80,12 +76,10 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
                     "{item.example}"
                   </p>
                   <p className="text-sm text-gray-700">{item.explanation}</p>
-                </div>
-              ))}
+                </div>)}
             </div>
           </ScrollArea>
         </CardContent>
       </Card>
-    </div>
-  );
+    </div>;
 };
