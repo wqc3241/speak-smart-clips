@@ -249,12 +249,30 @@ serve(async (req) => {
       );
     }
 
-    const bytes = await downloadAudio(audio.url);
-    const blob = uint8ToBlob(bytes, audio.mime || "audio/mp4");
+  const bytes = await downloadAudio(audio.url);
+  
+  // Determine proper file extension and mime type
+  let fileExt = "mp3";
+  let mimeType = "audio/mpeg";
+  
+  if (audio.mime?.includes("webm")) {
+    fileExt = "webm";
+    mimeType = "audio/webm";
+  } else if (audio.mime?.includes("m4a") || audio.mime?.includes("mp4")) {
+    fileExt = "m4a";
+    mimeType = "audio/mp4";
+  } else if (audio.mime?.includes("ogg")) {
+    fileExt = "ogg";
+    mimeType = "audio/ogg";
+  }
+  
+  console.log(`Creating audio file: ${fileExt}, mime: ${mimeType}, size: ${bytes.byteLength}`);
+  
+  const blob = uint8ToBlob(bytes, mimeType);
 
-    const form = new FormData();
-    form.append("file", blob, `audio.${audio.mime?.includes("webm") ? "webm" : "mp4"}`);
-    form.append("model", "whisper-1");
+  const form = new FormData();
+  form.append("file", blob, `audio.${fileExt}`);
+  form.append("model", "whisper-1");
 
     const openAIApiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openAIApiKey) throw new Error("OPENAI_API_KEY is not set");
