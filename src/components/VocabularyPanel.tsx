@@ -40,7 +40,7 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
     return languageMap[language?.toLowerCase() || ""] || "en-US";
   };
 
-  const speakWord = (word: string) => {
+  const speak = (text: string) => {
     if (!('speechSynthesis' in window)) {
       toast({
         title: "Not Supported",
@@ -53,8 +53,8 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
 
-    setSpeakingWord(word);
-    const utterance = new SpeechSynthesisUtterance(word);
+    setSpeakingWord(text);
+    const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = getLanguageCode(detectedLanguage);
     utterance.rate = 0.8; // Slightly slower for learning
     
@@ -66,7 +66,7 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
       setSpeakingWord(null);
       toast({
         title: "Pronunciation Error",
-        description: "Could not pronounce this word.",
+        description: "Could not pronounce this text.",
         variant: "destructive",
       });
     };
@@ -106,7 +106,7 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => speakWord(item.word)}
+                      onClick={() => speak(item.word)}
                       disabled={speakingWord === item.word}
                     >
                       <Volume2 className={`h-4 w-4 ${speakingWord === item.word ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
@@ -134,7 +134,18 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
               {grammar.map((item, index) => (
                 <div key={index} className="p-3 bg-muted rounded-lg">
                   <h4 className="font-semibold text-base text-primary mb-1">{item.rule}</h4>
-                  <p className="text-sm italic text-muted-foreground mb-2">"{item.example}"</p>
+                  <div className="flex items-start gap-2 mb-2">
+                    <p className="text-sm italic text-muted-foreground flex-1">"{item.example}"</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 flex-shrink-0"
+                      onClick={() => speak(item.example)}
+                      disabled={speakingWord === item.example}
+                    >
+                      <Volume2 className={`h-3.5 w-3.5 ${speakingWord === item.example ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
+                    </Button>
+                  </div>
                   <p className="text-sm text-foreground">{item.explanation}</p>
                 </div>
               ))}
