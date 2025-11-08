@@ -56,8 +56,8 @@ serve(async (req) => {
           {
             role: 'system',
             content: `You are a language learning assistant. Analyze the provided text and extract:
-1. 15 key vocabulary words with definitions and difficulty levels (beginner/intermediate/advanced)
-2. 5 important grammar patterns with examples from the text and explanations
+1. ALL key vocabulary words with definitions and difficulty levels (beginner/intermediate/advanced) - extract every important word that a learner should know from the text
+2. ALL important grammar patterns with examples from the text and explanations - extract every significant grammar structure used in the text
 3. The language of the text
 
 CRITICAL - LANGUAGE DETECTION RULES:
@@ -96,7 +96,7 @@ Return ONLY valid JSON in this exact format:
           }
         ],
         temperature: 0.3,
-        max_tokens: 2000,
+        max_tokens: 4000,
       }),
     });
 
