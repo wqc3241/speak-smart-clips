@@ -12,8 +12,8 @@ async function extractWithSupadata(videoId: string, languageCode?: string): Prom
   let apiUrl: string;
   
   if (languageCode) {
-    // Use translation endpoint for specific language
-    apiUrl = `https://api.supadata.ai/v1/youtube/transcript/translation?videoId=${videoId}&lang=${languageCode}`;
+    // Use translate endpoint for specific language
+    apiUrl = `https://api.supadata.ai/v1/youtube/transcript/translate?videoId=${videoId}&lang=${languageCode}`;
     console.log('=== SUPADATA: Requesting transcript in specific language:', languageCode);
   } else {
     // Use standard endpoint for default language
@@ -52,19 +52,25 @@ async function extractWithSupadata(videoId: string, languageCode?: string): Prom
     const data = await response.json();
     console.log('=== SUPADATA: Response received, processing transcript...');
 
-    // Supadata returns transcript in content array with segments
-    if (data.content && Array.isArray(data.content)) {
-      const transcript = data.content
+    // Handle both response formats from Supadata
+    let transcript: string;
+    
+    if (typeof data.content === 'string') {
+      // When text=true or direct string response
+      transcript = data.content;
+    } else if (data.content && Array.isArray(data.content)) {
+      // When text=false, content is array of segments
+      transcript = data.content
         .map((segment: any) => segment.text || segment.content || '')
         .filter((text: string) => text.trim().length > 0)
         .join(' ');
-      
-      console.log('=== SUPADATA: Successfully extracted transcript, length:', transcript.length);
-      return transcript;
+    } else {
+      console.log('=== SUPADATA: No content found in response');
+      return null;
     }
-
-    console.log('=== SUPADATA: No content found in response');
-    return null;
+    
+    console.log('=== SUPADATA: Successfully extracted transcript, length:', transcript.length);
+    return transcript;
   } catch (error) {
     console.error('=== SUPADATA: Error:', error);
     throw error;
