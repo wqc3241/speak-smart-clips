@@ -168,28 +168,98 @@ const Index = () => {
     }
   };
 
-  const saveCurrentProject = () => {
+  const saveCurrentProject = async () => {
     if (!currentProject) return;
+    
     try {
-      const stored = localStorage.getItem('projects');
-      const list = stored ? JSON.parse(stored) : [];
-      const entry = {
-        id: currentProject.id,
-        title: currentProject.title,
-        url: currentProject.url,
-        createdAt: new Date().toISOString(),
-        lastAccessed: new Date().toISOString(),
-        vocabularyCount: currentProject.vocabulary?.length || 0,
-        grammarCount: currentProject.grammar?.length || 0,
-        isFavorite: false,
-      };
-      const updated = [entry, ...list.filter((p: any) => p.url !== entry.url)];
-      localStorage.setItem('projects', JSON.stringify(updated));
-      toast({ title: 'Saved to Projects', description: 'Find it in the Projects tab.' });
-    } catch (e) {
-      console.error('Failed to save project', e);
-      toast({ title: 'Save failed', description: 'Could not save project', variant: 'destructive' });
+      console.log('Saving project to database...');
+      
+      // Check if project with this URL already exists
+      const { data: existing, error: checkError } = await supabase
+        .from('projects')
+        .select('id, title')
+        .eq('youtube_url', currentProject.url)
+        .maybeSingle();
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
+      }
+      
+      if (existing) {
+        // Project already exists - update it
+        const confirmUpdate = confirm(
+          `A project with this YouTube video already exists: "${existing.title}". Do you want to update it?`
+        );
+        
+        if (!confirmUpdate) {
+          toast({
+            title: "Save cancelled",
+            description: "The existing project was not modified.",
+          });
+          return;
+        }
+        
+        // Update existing project
+        const { error: updateError } = await supabase
+          .from('projects')
+          .update({
+            title: currentProject.title,
+            script: currentProject.script,
+            vocabulary: currentProject.vocabulary,
+            grammar: currentProject.grammar,
+            practice_sentences: currentProject.practiceSentences || [],
+            detected_language: currentProject.detectedLanguage,
+            last_accessed: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+        
+        if (updateError) throw updateError;
+        
+        toast({
+          title: "Project updated!",
+          description: "Your project has been updated successfully.",
+        });
+      } else {
+        // New project - insert it
+        const { error: insertError } = await supabase
+          .from('projects')
+          .insert({
+            youtube_url: currentProject.url,
+            title: currentProject.title,
+            script: currentProject.script,
+            vocabulary: currentProject.vocabulary,
+            grammar: currentProject.grammar,
+            practice_sentences: currentProject.practiceSentences || [],
+            detected_language: currentProject.detectedLanguage,
+            is_favorite: false,
+          });
+        
+        if (insertError) throw insertError;
+        
+        toast({
+          title: "Project saved!",
+          description: "Find it in the Projects tab.",
+        });
+      }
+      
+    } catch (error: any) {
+      console.error('Failed to save project:', error);
+      toast({
+        title: "Save failed",
+        description: error.message || "Could not save project",
+        variant: "destructive",
+      });
     }
+  };
+
+  const loadProject = (project: any) => {
+    setCurrentProject(project);
+    setActiveTab('lesson');
+    toast({
+      title: "Project loaded",
+      description: "Switched to Study tab",
+    });
   };
 
   const testAPIs = async () => {
@@ -505,7 +575,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="projects" className="space-y-6">
-            <ProjectManager />
+            <ProjectManager onLoadProject={loadProject} />
           </TabsContent>
         </Tabs>
       </div>
