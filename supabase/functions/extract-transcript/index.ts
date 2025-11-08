@@ -44,6 +44,10 @@ async function extractWithSupadata(videoId: string, languageCode?: string): Prom
         throw new Error('Rate limit exceeded. Please try again in a few minutes');
       } else if (response.status === 401 || response.status === 403) {
         throw new Error('API authentication failed');
+      } else if (response.status === 402) {
+        // Translation endpoint requires paid plan - fall back to standard transcript
+        console.log('=== SUPADATA: Translation not available on current plan, falling back to standard transcript');
+        return null; // Will trigger fallback
       }
       
       throw new Error(`Failed to extract transcript: ${response.status}`);
@@ -82,7 +86,13 @@ async function extractTranscript(videoId: string, languageCode?: string): Promis
     console.log('=== Starting transcript extraction for video:', videoId, 'language:', languageCode || 'auto');
     
     // Try Supadata API with language code
-    const transcript = await extractWithSupadata(videoId, languageCode);
+    let transcript = await extractWithSupadata(videoId, languageCode);
+    
+    // If translation endpoint failed (402), try standard endpoint
+    if (!transcript && languageCode) {
+      console.log('=== Translation failed, trying standard transcript endpoint');
+      transcript = await extractWithSupadata(videoId);
+    }
     
     if (transcript && transcript.length > 50) {
       console.log('=== Successfully extracted transcript via Supadata');
