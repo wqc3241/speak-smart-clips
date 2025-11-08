@@ -87,6 +87,12 @@ const Index = () => {
           captionsAvailable: data.captionsAvailable || false,
         };
       }
+
+      // If transcript is too short, throw immediately with user-friendly message
+      if (data?.error && data.error.includes('more than 50 words')) {
+        throw new Error(data.error);
+      }
+
       console.warn('extract-transcript failed or returned no transcript:', data?.error);
     } catch (err) {
       console.warn('extract-transcript edge function failed:', err);

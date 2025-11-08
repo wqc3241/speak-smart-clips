@@ -66,7 +66,7 @@ async function extractTranscript(videoId: string): Promise<string> {
     // Try Supadata API first
     const transcript = await extractWithSupadata(videoId);
     
-    if (transcript && transcript.length > 10) {
+    if (transcript && transcript.length > 50) {
       console.log('=== Successfully extracted transcript via Supadata');
       return transcript;
     }
@@ -99,11 +99,11 @@ serve(async (req) => {
     const videoTitle = getVideoTitle(videoId);
     const transcript = await extractTranscript(videoId);
     
-    if (!transcript || transcript.length < 10) {
+    if (!transcript || transcript.length < 50) {
       const result: TranscriptResult = {
         success: false,
-        error: 'Could not extract transcript from this video',
-        suggestion: 'This video may not have captions available or may not be accessible for transcription. Please try a different video.'
+        error: 'Please select a video with more than 50 words.',
+        suggestion: 'The transcript from this video is too short for analysis. Please try a longer video with substantial spoken content.'
       };
 
       return new Response(JSON.stringify(result), {
