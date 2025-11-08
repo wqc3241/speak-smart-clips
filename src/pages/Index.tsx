@@ -420,10 +420,11 @@ const Index = () => {
                   <Badge variant="secondary">{currentProject.detectedLanguage}</Badge>
                 </div>
               )}
-              <VocabularyPanel 
-                vocabulary={currentProject.vocabulary} 
-                grammar={currentProject.grammar}
-              />
+            <VocabularyPanel 
+              vocabulary={currentProject.vocabulary} 
+              grammar={currentProject.grammar}
+              detectedLanguage={currentProject.detectedLanguage}
+            />
             </div>
                 </div>
               </div>

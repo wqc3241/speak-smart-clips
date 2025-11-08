@@ -1,9 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Book, GraduationCap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Book, GraduationCap, Volume2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 interface VocabularyItem {
   word: string;
   definition: string;
@@ -17,8 +19,61 @@ interface GrammarItem {
 interface VocabularyPanelProps {
   vocabulary: VocabularyItem[];
   grammar: GrammarItem[];
+  detectedLanguage?: string;
 }
-export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, grammar }) => {
+export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, grammar, detectedLanguage }) => {
+  const [speakingWord, setSpeakingWord] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const getLanguageCode = (language?: string): string => {
+    const languageMap: Record<string, string> = {
+      "japanese": "ja-JP",
+      "english": "en-US",
+      "spanish": "es-ES",
+      "french": "fr-FR",
+      "chinese": "zh-CN",
+      "korean": "ko-KR",
+      "german": "de-DE",
+      "italian": "it-IT",
+      "portuguese": "pt-PT",
+    };
+    return languageMap[language?.toLowerCase() || ""] || "en-US";
+  };
+
+  const speakWord = (word: string) => {
+    if (!('speechSynthesis' in window)) {
+      toast({
+        title: "Not Supported",
+        description: "Text-to-speech is not supported in your browser.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    setSpeakingWord(word);
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.lang = getLanguageCode(detectedLanguage);
+    utterance.rate = 0.8; // Slightly slower for learning
+    
+    utterance.onend = () => {
+      setSpeakingWord(null);
+    };
+
+    utterance.onerror = () => {
+      setSpeakingWord(null);
+      toast({
+        title: "Pronunciation Error",
+        description: "Could not pronounce this word.",
+        variant: "destructive",
+      });
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case "beginner":
@@ -44,12 +99,21 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
           <ScrollArea className="h-48">
             <div className="space-y-3">
               {vocabulary.map((item, index) => (
-                <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                <div key={index} className="p-3 bg-muted rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-semibold text-lg">{item.word}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => speakWord(item.word)}
+                      disabled={speakingWord === item.word}
+                    >
+                      <Volume2 className={`h-4 w-4 ${speakingWord === item.word ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
+                    </Button>
                     <Badge className={getDifficultyColor(item.difficulty)}>{item.difficulty}</Badge>
                   </div>
-                  <p className="text-sm text-gray-600">{item.definition}</p>
+                  <p className="text-sm text-muted-foreground">{item.definition}</p>
                 </div>
               ))}
             </div>
@@ -68,10 +132,10 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
           <ScrollArea className="h-48">
             <div className="space-y-3">
               {grammar.map((item, index) => (
-                <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                  <h4 className="font-semibold text-base text-purple-700 mb-1">{item.rule}</h4>
-                  <p className="text-sm italic text-gray-600 mb-2">"{item.example}"</p>
-                  <p className="text-sm text-gray-700">{item.explanation}</p>
+                <div key={index} className="p-3 bg-muted rounded-lg">
+                  <h4 className="font-semibold text-base text-primary mb-1">{item.rule}</h4>
+                  <p className="text-sm italic text-muted-foreground mb-2">"{item.example}"</p>
+                  <p className="text-sm text-foreground">{item.explanation}</p>
                 </div>
               ))}
             </div>
