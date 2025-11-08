@@ -57,8 +57,12 @@ const Auth = () => {
       async (event, session) => {
         if (event === 'PASSWORD_RECOVERY') {
           setIsRecoveryMode(true);
-        } else if (event === 'SIGNED_IN' && session && !isRecoveryMode) {
-          navigate("/");
+        } else if (event === 'SIGNED_IN' && session) {
+          // Check URL hash directly instead of relying on state
+          const isRecovery = checkForRecoveryToken();
+          if (!isRecovery) {
+            navigate("/");
+          }
         }
       }
     );
