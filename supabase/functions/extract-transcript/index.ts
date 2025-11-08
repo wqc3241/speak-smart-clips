@@ -2,14 +2,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { CORS_HEADERS, TranscriptResult } from './types.ts';
 
-async function extractWithSupadata(videoId: string): Promise<string | null> {
+async function extractWithSupadata(videoId: string, languageCode?: string): Promise<string | null> {
   const supadataApiKey = Deno.env.get('SUPADATA_API_KEY');
   if (!supadataApiKey) {
     console.error('=== SUPADATA: API key not configured');
     throw new Error('Supadata API key not configured');
   }
 
-  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  let videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  
+  // Add language parameter if provided
+  if (languageCode) {
+    videoUrl += `&lang=${languageCode}`;
+    console.log('=== SUPADATA: Requesting transcript in language:', languageCode);
+  }
+  
   console.log('=== SUPADATA: Extracting transcript for:', videoUrl);
 
   try {
@@ -59,12 +66,12 @@ async function extractWithSupadata(videoId: string): Promise<string | null> {
   }
 }
 
-async function extractTranscript(videoId: string): Promise<string> {
+async function extractTranscript(videoId: string, languageCode?: string): Promise<string> {
   try {
-    console.log('=== Starting transcript extraction for video:', videoId);
+    console.log('=== Starting transcript extraction for video:', videoId, 'language:', languageCode || 'auto');
     
-    // Try Supadata API first
-    const transcript = await extractWithSupadata(videoId);
+    // Try Supadata API with language code
+    const transcript = await extractWithSupadata(videoId, languageCode);
     
     if (transcript && transcript.length > 50) {
       console.log('=== Successfully extracted transcript via Supadata');
@@ -88,16 +95,16 @@ serve(async (req) => {
   }
 
   try {
-    const { videoId } = await req.json();
+    const { videoId, languageCode } = await req.json();
 
     if (!videoId) {
       throw new Error('Video ID is required');
     }
 
-    console.log('=== Extracting transcript for video ID:', videoId);
+    console.log('=== Extracting transcript for video ID:', videoId, 'language:', languageCode || 'auto');
 
     const videoTitle = getVideoTitle(videoId);
-    const transcript = await extractTranscript(videoId);
+    const transcript = await extractTranscript(videoId, languageCode);
     
     if (!transcript || transcript.length < 50) {
       const result: TranscriptResult = {

@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.generate-practice-sentences]
 verify_jwt = false
+
+[functions.get-available-languages]
+verify_jwt = false
