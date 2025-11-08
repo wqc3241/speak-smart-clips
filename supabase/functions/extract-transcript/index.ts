@@ -9,18 +9,22 @@ async function extractWithSupadata(videoId: string, languageCode?: string): Prom
     throw new Error('Supadata API key not configured');
   }
 
-  let apiUrl: string;
+  // Build YouTube URL
+  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
+  // Always use the standard /v1/transcript endpoint with optional lang parameter
+  let apiUrl = `https://api.supadata.ai/v1/transcript?url=${encodeURIComponent(videoUrl)}`;
+  
+  // Add language parameter if specified
   if (languageCode) {
-    // Use translate endpoint for specific language
-    apiUrl = `https://api.supadata.ai/v1/youtube/transcript/translate?videoId=${videoId}&lang=${languageCode}`;
-    console.log('=== SUPADATA: Requesting transcript in specific language:', languageCode);
+    apiUrl += `&lang=${languageCode}`;
+    console.log('=== SUPADATA: Requesting transcript in language:', languageCode);
   } else {
-    // Use standard endpoint for default language
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    apiUrl = `https://api.supadata.ai/v1/transcript?url=${encodeURIComponent(videoUrl)}`;
     console.log('=== SUPADATA: Requesting transcript in default language');
   }
+  
+  // Add text=true to get plain text response instead of timestamped chunks
+  apiUrl += `&text=true`;
   
   console.log('=== SUPADATA: API URL:', apiUrl);
 
@@ -44,10 +48,6 @@ async function extractWithSupadata(videoId: string, languageCode?: string): Prom
         throw new Error('Rate limit exceeded. Please try again in a few minutes');
       } else if (response.status === 401 || response.status === 403) {
         throw new Error('API authentication failed');
-      } else if (response.status === 402) {
-        // Translation endpoint requires paid plan - fall back to standard transcript
-        console.log('=== SUPADATA: Translation not available on current plan, falling back to standard transcript');
-        return null; // Will trigger fallback
       }
       
       throw new Error(`Failed to extract transcript: ${response.status}`);
@@ -86,13 +86,7 @@ async function extractTranscript(videoId: string, languageCode?: string): Promis
     console.log('=== Starting transcript extraction for video:', videoId, 'language:', languageCode || 'auto');
     
     // Try Supadata API with language code
-    let transcript = await extractWithSupadata(videoId, languageCode);
-    
-    // If translation endpoint failed (402), try standard endpoint
-    if (!transcript && languageCode) {
-      console.log('=== Translation failed, trying standard transcript endpoint');
-      transcript = await extractWithSupadata(videoId);
-    }
+    const transcript = await extractWithSupadata(videoId, languageCode);
     
     if (transcript && transcript.length > 50) {
       console.log('=== Successfully extracted transcript via Supadata');
