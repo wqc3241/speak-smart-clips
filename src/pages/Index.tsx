@@ -532,12 +532,12 @@ const Index = () => {
                   {isProcessing ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="hidden sm:inline">Loading...</span>
+                      Loading...
                     </>
                   ) : (
                     <>
                       <Beaker className="w-4 h-4" />
-                      <span className="hidden sm:inline">See Demo</span>
+                      See Demo
                     </>
                   )}
                 </Button>
