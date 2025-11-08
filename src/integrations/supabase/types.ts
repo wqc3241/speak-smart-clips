@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           created_at: string | null
@@ -27,6 +54,7 @@ export type Database = {
           script: string
           title: string
           updated_at: string | null
+          user_id: string | null
           vocabulary: Json
           vocabulary_count: number | null
           youtube_url: string
@@ -43,6 +71,7 @@ export type Database = {
           script: string
           title: string
           updated_at?: string | null
+          user_id?: string | null
           vocabulary?: Json
           vocabulary_count?: number | null
           youtube_url: string
@@ -59,6 +88,7 @@ export type Database = {
           script?: string
           title?: string
           updated_at?: string | null
+          user_id?: string | null
           vocabulary?: Json
           vocabulary_count?: number | null
           youtube_url?: string

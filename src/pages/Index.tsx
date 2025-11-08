@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,10 +12,11 @@ import { ScriptDisplay } from "@/components/ScriptDisplay";
 import { VocabularyPanel } from "@/components/VocabularyPanel";
 import { PracticeInterface } from "@/components/PracticeInterface";
 import { ProjectManager } from "@/components/ProjectManager";
-import { Youtube, BookOpen, MessageCircle, Save, History, Beaker, Loader2 } from 'lucide-react';
+import { Youtube, BookOpen, MessageCircle, Save, History, Beaker, Loader2, LogOut, User as UserIcon } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { YoutubeTranscript } from 'youtube-transcript';
+import { User, Session } from '@supabase/supabase-js';
 
 // Test data for development - Japanese tennis racket video transcript
 const TEST_TRANSCRIPT = `おはようございます。え、ウィンザーラケスチョップ渋谷店の斎藤です。 おはようございます。ナビゲーターの三葉です。本日の一押しは はい、 こちらのバボラのタッチトニックタッチニック 高級な糸と思いますよね。そこを調子していきたいと思います。 はい。ではやっていきたいと思います。よろしくお願いします。 一押し [音楽] 重さ、バランス、スイングウェイトを瞬時 に測れる機械になります。こちらは ウィンザー前点に配置されている機械と なっております。複数本ラケットを持ち たい方ですとか、重さバランスを気にされ ている方に計測しています。ガットが切れ てしまった時にもう1本あると安心ですし 、試合の多い時期にガトが切れてしまった 時には、え、2本3本あるとも安心すると 思います。ラケットはカタログにも重さは 書いてあるんですけれども、どうしても 個体さがありますので、ウィンザーでは 豊富な在庫があります。ご希望に沿った 近いラケットをお探しすることができます ので、是非スタッフにお声かけをして ください。皆様のご来店をお待ちしており ます。 では最さんやっていきたいと思いますが、本日の一押しは はい。 バボラのタッチニック。 タッチです。 はい。こちらどんな商品でしょうか? はい。で、ま、まずナチュラルガットって言われるとやっぱりお客様によく言われるのがやっぱり値段が高いからなかなか手が出せない と言われてる中でバボラが出している、ま、入門用のナチュラルストリングと言われるストリン。ただ入門用だからって言ってもそのままずっと使い続ける方もいらっしゃいます。 なので、ま、ナチュラルの中で行けば、ま、安い方。ただ内の糸もいれば、まあまあ 1番高いところぐらいになる。 そうですね。 イメージですね。 はい。で、えっと、一応タッチトニックっていうストリングには、ま、 2種類ゲージがありまして、この 1.35 よりちょっと細い感じで金性がないものと、ま、 1.35 以上と書かれてるもの、昔は、え、ボールフィールって言われた、こっちらロンジビティって言われたようにこういったちょっと 2種類のゲージが出てます。すいません。 今おっしゃいました金性がないとおっしゃったんですけども、それは加工上ということですね。 そうですね。 があるので、ちょっと、ま、少しお値段はお買い求めやすくなってますよ。でも質は十分いいものでっていうのが作、今おっしゃったように太さが違う。ま、やっぱ天然素材を使っているので、え、太い部分もあれば細い部分もあるということなんですが、ただ一定レンジの中に収まっているので、 これテンションかけて貼っちゃえば うん。 あんまり関係ないというか、均質になっちゃうと思うんですけどね。 そうですね。はい。そして ナイロンのストリンクスの中では、ま、やっぱり 1番圧倒的にってあるのはこの X1倍です。 で、こちらも当然反発性も高く、ま、このナチュラルガットを目指して作ってるっていうところも、ま、それを超えるつもりで作ってるところもあるのですごくいいソリングで人気はあるんですけど、やっぱりでもそのナチュラルのテンション性、単発性にはなかなか 勝負してくのは難しいかなと思います。 私も個人的にちょっと調べたんですよ、色々。 そうするとこの2 つって割と柔らかいように言われるじゃないですか。ただ結構しっかりしてて、えっと、ロンよりもやっぱり共同的にはしっかりしてるんですよね。そういう意味では非常に近しいテクニファイバーがエクサバイフのナチュラルを目指して作ったのもすごく頷付ける。うん。はい。 ただでもやっぱ天然物にというとこもあるんですかね。そうですね。 で、あの、皆さんこうじゃ、ナチュラルにしようかなと思った時にちょっとらうところていうのがまず 1つがこう雨にうん。 よく言われますね。 はい。 濡れちゃうとナチュラルって使えないんでしょって言われるんですけど、それはもうロンのスリンスについても濡れたら質はもう一気にガクっと落ちます。 たそういった水性っていうところはそれほど差がないですし、コーティングはもうバボランのナチュラルっていうもコーティングは昔と比べればかなり変わってるのでそこまで ナチュラルだけが全然水性に弱いってことはないと思うので、ま、同じように使っていただいていいかなと思う。 うん。 はい。 そういう意味では、ま、雨の日 そんな気にしなくてもというところですね。 そうですね。そしてもう1 個やっぱり値段がナチュラルの方がやっぱり圧倒的に高いでしょって言われてしまうんですけど、 実際今これ2つあるんですけど、えっと はい。 ストリングの価格 はい。 テクニファイバーX3倍フェガユと 4730円 はい。4730 円というのが、ま、ガッツの、ま、元々のお値段 でナチュラルタッチソニック はい。 7590円 ていうお値段が元々のストに出た。 ただタチトニックって張り上がりの価格っていうのはガットの価格よりも逆に安いんですよ。どういうことでしょう? お買読になってます。 なるほど。お はい。 どうしても ここの差って15600円。 ああ、なるほどなるほどなるほど。 だったらナチュラルをね、貼ってもいいんじゃないかっていう。 そう。パットとしては3000 円ぐらいお値段が高いものなのに 1500 円ぐらいしか貼り上がれる値段さもないので是非このナチュラルっていうのをもうちょっと身近に感じて試していただきたいかなと。 そうですね。 ま、ナチュラル打ったことない方って売られるんですかね? うん。結構いらっしゃいますよ。 売られますよね。やっぱり 1 度打つと、ま、天然物って言われるものの良さってやっぱりあるんだなって感じますもんね。 そうですね。で、やっぱり1 度ナチュラルス使い出すともうそのままずっと使い続ける方も多いので、ま、新しいラケットをご購入いただい時もそのまま差額でタチラルは貼るっていう方が多いです。 [音楽] はい。 うん。ま、これからね、12 月に向けてボーナスシーズンでもありますから、ちょっとね、 1 回こう贅沢してみようかなという気分で貼っていただいて、 ま、抜けれなくなる場合もありますけど、ま、戻すことはできるので、ま、毎月ね、切れるとかっていうことはそれほどない方が多いと思うので、そういう方にとっては 3 ヶ月半年の張り替えとして是非テンション性の高い、カンパ通力の高いこのタッチニックを試していただきたいと思います。 はい。ということで今日いいた一押しは はい。 バオラのナチュラルスリングタッチトニックを一させていただきました。 はい、是非の機会お試しください。さん、ありがとうございました。 はい、ありがとうございます。`;
@@ -29,7 +30,42 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState('input');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState<string>('');
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const { toast } = useToast();
+
+  // Auth state management
+  useEffect(() => {
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        // Redirect to auth if not logged in
+        if (!session) {
+          window.location.href = '/auth';
+        }
+      }
+    );
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        window.location.href = '/auth';
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/auth';
+  };
 
   const extractVideoId = (url: string) => {
     const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/);
@@ -234,6 +270,7 @@ const Index = () => {
             practice_sentences: currentProject.practiceSentences || [],
             detected_language: currentProject.detectedLanguage,
             is_favorite: false,
+            user_id: user?.id,
           });
         
         if (insertError) throw insertError;
@@ -457,6 +494,22 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-6 md:py-8">
+        {/* User Header */}
+        {user && (
+          <div className="mb-4 flex items-center justify-between bg-card p-4 rounded-lg border">
+            <div className="flex items-center gap-2">
+              <UserIcon className="w-5 h-5 text-primary" />
+              <span className="text-sm text-muted-foreground">
+                {user.email}
+              </span>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleLogout}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </div>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Desktop Tab Navigation */}
           <TabsList className="hidden md:grid w-full grid-cols-4 mb-6 bg-muted">
