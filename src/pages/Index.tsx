@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VideoPreview } from "@/components/VideoPreview";
 import { ScriptDisplay } from "@/components/ScriptDisplay";
 import { VocabularyPanel } from "@/components/VocabularyPanel";
@@ -261,6 +262,52 @@ const Index = () => {
       title: "Project loaded",
       description: "Switched to Study tab",
     });
+  };
+
+  const regenerateAnalysis = async () => {
+    if (!currentProject) return;
+    
+    setIsProcessing(true);
+    setProcessingStep('Re-analyzing content with AI...');
+    
+    try {
+      console.log('Regenerating analysis with language:', currentProject.detectedLanguage);
+      
+      // Re-analyze content with the current detected language
+      const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(currentProject.script);
+      
+      setProcessingStep('Generating practice sentences...');
+      
+      // Regenerate practice sentences
+      const practiceSentences = await generatePracticeSentences(vocabulary, grammar, detectedLanguage);
+      
+      // Update current project
+      setCurrentProject({
+        ...currentProject,
+        vocabulary,
+        grammar,
+        detectedLanguage,
+        practiceSentences
+      });
+      
+      setProcessingStep('');
+      
+      toast({
+        title: "Analysis regenerated!",
+        description: `Content re-analyzed as ${detectedLanguage}`,
+      });
+      
+    } catch (error: any) {
+      console.error('Failed to regenerate analysis:', error);
+      toast({
+        title: "Regeneration failed",
+        description: error.message || "Could not regenerate analysis",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+      setProcessingStep('');
+    }
   };
 
   const testAPIs = async () => {
@@ -568,9 +615,68 @@ const Index = () => {
                   Save Project
                 </Button>
 
-                {/* Language Badge */}
+                {/* Language Selector */}
                 {currentProject.detectedLanguage && (
-                  <Badge variant="secondary" className="mb-2">{currentProject.detectedLanguage}</Badge>
+                  <Card className="p-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">Detected language:</span>
+                        <Select 
+                          value={currentProject.detectedLanguage} 
+                          onValueChange={(value) => {
+                            setCurrentProject({
+                              ...currentProject,
+                              detectedLanguage: value
+                            });
+                            toast({
+                              title: "Language updated",
+                              description: `Changed to ${value}. Click "Regenerate" to re-analyze.`
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Japanese">Japanese</SelectItem>
+                            <SelectItem value="Chinese">Chinese (Mandarin)</SelectItem>
+                            <SelectItem value="Korean">Korean</SelectItem>
+                            <SelectItem value="Spanish">Spanish</SelectItem>
+                            <SelectItem value="French">French</SelectItem>
+                            <SelectItem value="German">German</SelectItem>
+                            <SelectItem value="Italian">Italian</SelectItem>
+                            <SelectItem value="Portuguese">Portuguese</SelectItem>
+                            <SelectItem value="Russian">Russian</SelectItem>
+                            <SelectItem value="Arabic">Arabic</SelectItem>
+                            <SelectItem value="Hindi">Hindi</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={regenerateAnalysis}
+                        disabled={isProcessing}
+                        className="w-full sm:w-auto"
+                      >
+                        {isProcessing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Regenerating...
+                          </>
+                        ) : (
+                          'Regenerate Analysis'
+                        )}
+                      </Button>
+                    </div>
+                    {isProcessing && processingStep && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-3 animate-fade-in">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>{processingStep}</span>
+                      </div>
+                    )}
+                  </Card>
                 )}
 
                 {/* Content Grid */}

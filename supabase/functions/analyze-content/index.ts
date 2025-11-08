@@ -60,11 +60,20 @@ serve(async (req) => {
 2. 5 important grammar patterns with examples from the text and explanations
 3. The language of the text
 
+CRITICAL - LANGUAGE DETECTION RULES:
+- **Japanese**: Contains hiragana (あいうえお), katakana (アイウエオ), particles (は、を、に、が、の、へ、と、で、から、まで), verb endings like ます/です/た/て
+- **Chinese (Mandarin)**: Only uses hanzi characters (汉字/漢字), no hiragana/katakana, uses 的、了、吗、呢、啊 particles
+- **Korean**: Uses Hangul (한글) characters
+- Check for language-specific particles and writing systems FIRST before making a determination
+- If text contains hiragana or katakana characters, it is ALWAYS Japanese, even if it also has kanji
+- If text only has hanzi with no hiragana/katakana, it is Chinese
+- Look for Japanese verb conjugations (ている、ました、でした) vs Chinese aspect markers (了、过、着)
+
 IMPORTANT: Provide all definitions and explanations in ENGLISH (the learner's native language), but keep vocabulary words, grammar rule names, and grammar examples in the ORIGINAL LANGUAGE of the text.
 
 Return ONLY valid JSON in this exact format:
 {
-  "detectedLanguage": "language name",
+  "detectedLanguage": "language name (Japanese, Chinese, Korean, Spanish, etc.)",
   "vocabulary": [
     {
       "word": "word in the original language",
