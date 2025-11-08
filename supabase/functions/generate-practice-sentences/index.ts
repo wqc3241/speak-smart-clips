@@ -111,6 +111,7 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no code 
     console.log('OpenAI response received');
 
     let generatedText = data.choices[0].message.content.trim();
+    console.log('Raw response (first 500 chars):', generatedText.substring(0, 500));
     
     // Remove markdown code blocks if present
     if (generatedText.startsWith('```json')) {
@@ -119,7 +120,21 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no code 
       generatedText = generatedText.replace(/```\n?/g, '');
     }
 
-    const result = JSON.parse(generatedText);
+    // Clean up control characters and fix common JSON issues
+    generatedText = generatedText
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+      .trim();
+
+    console.log('Cleaned response (first 500 chars):', generatedText.substring(0, 500));
+
+    let result;
+    try {
+      result = JSON.parse(generatedText);
+    } catch (parseError: any) {
+      console.error('JSON parse error:', parseError.message);
+      console.error('Failed to parse text:', generatedText);
+      throw new Error(`Failed to parse AI response: ${parseError.message}`);
+    }
 
     console.log('Generated sentences:', result.sentences?.length || 0);
 
