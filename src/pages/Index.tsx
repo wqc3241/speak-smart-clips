@@ -100,78 +100,35 @@ const Index = () => {
     throw new Error('Could not extract transcript. Please ensure the video has captions available and try again.');
   };
 
-  const analyzeContent = (script: string) => {
-    // Split into sentences for grammar analysis
-    const sentences = script.match(/[^.!?]+[.!?]+/g) || [];
-    
-    // Deduplicate vocabulary: extract unique words, clean and normalize
-    const words = script.toLowerCase().split(/\s+/);
-    const uniqueWordsMap = new Map<string, string>();
-    
-    words.forEach(word => {
-      const cleaned = word.replace(/[^\w]/g, '');
-      if (cleaned.length > 4 && !uniqueWordsMap.has(cleaned)) {
-        uniqueWordsMap.set(cleaned, word);
-      }
-    });
-    
-    const vocabulary = Array.from(uniqueWordsMap.keys()).slice(0, 15).map(word => ({
-      word: word,
-      definition: `Definition for "${word}" - this would come from a dictionary API`,
-      difficulty: (word.length > 8 ? 'advanced' : word.length > 6 ? 'intermediate' : 'beginner') as 'beginner' | 'intermediate' | 'advanced'
-    }));
-    
-    // Deduplicate grammar: extract unique patterns from actual sentences
-    const grammarMap = new Map<string, { rule: string; example: string; explanation: string }>();
-    
-    sentences.forEach(sentence => {
-      const trimmed = sentence.trim();
-      if (trimmed.length < 10) return;
+  const analyzeContentWithAI = async (script: string) => {
+    try {
+      console.log('Analyzing content with AI...');
       
-      // Detect present perfect (has/have + past participle)
-      if (/\b(has|have)\s+\w+ed\b/i.test(trimmed) && !grammarMap.has('Present Perfect')) {
-        const match = trimmed.match(/\b(has|have)\s+\w+ed\b/i);
-        grammarMap.set('Present Perfect', {
-          rule: 'Present Perfect',
-          example: match ? match[0] : 'has/have + past participle',
-          explanation: 'Used for actions continuing to present or with present relevance'
-        });
+      const { data, error } = await supabase.functions.invoke('analyze-content', {
+        body: { transcript: script }
+      });
+
+      if (error) {
+        console.error('AI analysis error:', error);
+        throw error;
       }
+
+      console.log('AI analysis result:', data);
       
-      // Detect past simple (was/were, regular past tense)
-      if (/\b(was|were|walked|talked|looked)\b/i.test(trimmed) && !grammarMap.has('Past Simple')) {
-        const match = trimmed.match(/\b(was|were|\w+ed)\b/i);
-        grammarMap.set('Past Simple', {
-          rule: 'Past Simple',
-          example: match ? match[0] : 'was/were',
-          explanation: 'Used for completed actions in the past'
-        });
-      }
-      
-      // Detect modal verbs
-      if (/\b(can|could|would|should|will|may|might|must)\b/i.test(trimmed) && !grammarMap.has('Modal Verbs')) {
-        const match = trimmed.match(/\b(can|could|would|should|will|may|might|must)\b/i);
-        grammarMap.set('Modal Verbs', {
-          rule: 'Modal Verbs',
-          example: match ? match[0] : 'can/could/would',
-          explanation: 'Express possibility, ability, permission, or obligation'
-        });
-      }
-      
-      // Detect present continuous (am/is/are + -ing)
-      if (/\b(am|is|are)\s+\w+ing\b/i.test(trimmed) && !grammarMap.has('Present Continuous')) {
-        const match = trimmed.match(/\b(am|is|are)\s+\w+ing\b/i);
-        grammarMap.set('Present Continuous', {
-          rule: 'Present Continuous',
-          example: match ? match[0] : 'am/is/are + -ing',
-          explanation: 'Used for actions happening now or around now'
-        });
-      }
-    });
-    
-    const grammar = Array.from(grammarMap.values());
-    
-    return { vocabulary, grammar };
+      return {
+        vocabulary: data.vocabulary || [],
+        grammar: data.grammar || [],
+        detectedLanguage: data.detectedLanguage || 'Unknown'
+      };
+    } catch (error) {
+      console.error('Failed to analyze content with AI:', error);
+      // Return empty arrays if AI analysis fails
+      return {
+        vocabulary: [],
+        grammar: [],
+        detectedLanguage: 'Unknown'
+      };
+    }
   };
 
   const saveCurrentProject = () => {
@@ -268,7 +225,9 @@ const Index = () => {
       console.log('Processing YouTube URL:', youtubeUrl);
       
       const { transcript, videoTitle } = await fetchTranscript(videoId);
-      const { vocabulary, grammar } = analyzeContent(transcript);
+      
+      console.log('Analyzing content with AI...');
+      const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(transcript);
       
       const project = {
         id: Date.now(),
@@ -276,7 +235,8 @@ const Index = () => {
         url: youtubeUrl,
         script: transcript,
         vocabulary: vocabulary,
-        grammar: grammar
+        grammar: grammar,
+        detectedLanguage: detectedLanguage
       };
       
       setCurrentProject(project);
@@ -284,7 +244,7 @@ const Index = () => {
       
       toast({
         title: "Video processed successfully!",
-        description: "Your lesson is ready for study.",
+        description: `Your lesson is ready for study. Language: ${detectedLanguage}`,
       });
       
     } catch (error) {
@@ -388,10 +348,18 @@ const Index = () => {
                   </Button>
                 </div>
                 <div className="space-y-4">
-                  <VocabularyPanel 
-                    vocabulary={currentProject.vocabulary}
-                    grammar={currentProject.grammar}
-                  />
+            <div className="space-y-4">
+              {currentProject.detectedLanguage && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Detected Language:</span>
+                  <Badge variant="secondary">{currentProject.detectedLanguage}</Badge>
+                </div>
+              )}
+              <VocabularyPanel 
+                vocabulary={currentProject.vocabulary} 
+                grammar={currentProject.grammar}
+              />
+            </div>
                 </div>
               </div>
             ) : (
