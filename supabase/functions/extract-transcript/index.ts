@@ -9,18 +9,23 @@ async function extractWithSupadata(videoId: string, languageCode?: string): Prom
     throw new Error('Supadata API key not configured');
   }
 
-  let videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  let apiUrl: string;
   
-  // Add language parameter if provided
   if (languageCode) {
-    videoUrl += `&lang=${languageCode}`;
-    console.log('=== SUPADATA: Requesting transcript in language:', languageCode);
+    // Use translation endpoint for specific language
+    apiUrl = `https://api.supadata.ai/v1/youtube/transcript/translation?videoId=${videoId}&lang=${languageCode}`;
+    console.log('=== SUPADATA: Requesting transcript in specific language:', languageCode);
+  } else {
+    // Use standard endpoint for default language
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    apiUrl = `https://api.supadata.ai/v1/transcript?url=${encodeURIComponent(videoUrl)}`;
+    console.log('=== SUPADATA: Requesting transcript in default language');
   }
   
-  console.log('=== SUPADATA: Extracting transcript for:', videoUrl);
+  console.log('=== SUPADATA: API URL:', apiUrl);
 
   try {
-    const response = await fetch(`https://api.supadata.ai/v1/transcript?url=${encodeURIComponent(videoUrl)}`, {
+    const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
         'x-api-key': supadataApiKey,
