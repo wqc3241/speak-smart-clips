@@ -66,7 +66,7 @@ async function extractTranscript(videoId: string): Promise<string> {
     // Try Supadata API first
     const transcript = await extractWithSupadata(videoId);
     
-    if (transcript && transcript.length > 50) {
+    if (transcript && transcript.length > 10) {
       console.log('=== Successfully extracted transcript via Supadata');
       return transcript;
     }
