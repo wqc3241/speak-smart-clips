@@ -12,7 +12,7 @@ import { ScriptDisplay } from "@/components/ScriptDisplay";
 import { VocabularyPanel } from "@/components/VocabularyPanel";
 import { PracticeInterface } from "@/components/PracticeInterface";
 import { ProjectManager } from "@/components/ProjectManager";
-import { Youtube, BookOpen, MessageCircle, Save, History, TestTube, Beaker, Loader2 } from 'lucide-react';
+import { Youtube, BookOpen, MessageCircle, Save, History, Beaker, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { YoutubeTranscript } from 'youtube-transcript';
@@ -29,7 +29,6 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState('input');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState<string>('');
-  const [isTesting, setIsTesting] = useState(false);
   const { toast } = useToast();
 
   const extractVideoId = (url: string) => {
@@ -310,50 +309,6 @@ const Index = () => {
     }
   };
 
-  const testAPIs = async () => {
-    setIsTesting(true);
-    try {
-      console.log('Testing APIs...');
-      
-      const { data, error } = await supabase.functions.invoke('test-apis', {
-        body: { testType: 'both' }
-      });
-
-      if (error) {
-        console.error('API test error:', error);
-        throw new Error(error.message || 'Failed to test APIs');
-      }
-
-      console.log('API test results:', data);
-      
-      if (data.success) {
-        toast({
-          title: "✅ All APIs Working!",
-          description: `YouTube: ${data.youtube.success ? '✅' : '❌'} | OpenAI: ${data.openai.success ? '✅' : '❌'}`,
-        });
-      } else {
-        const issues: string[] = [];
-        if (!data.youtube.success) issues.push(`YouTube: ${data.youtube.error}`);
-        if (!data.openai.success) issues.push(`OpenAI: ${data.openai.error}`);
-        
-        toast({
-          title: "❌ API Issues Found",
-          description: issues.join(' | '),
-          variant: "destructive",
-        });
-      }
-      
-    } catch (error: any) {
-      console.error('API testing failed:', error);
-      toast({
-        title: "Testing failed",
-        description: error.message || "Could not test APIs",
-        variant: "destructive",
-      });
-    } finally {
-      setIsTesting(false);
-    }
-  };
 
   const handleUseTestData = async () => {
     setIsProcessing(true);
@@ -567,37 +522,25 @@ const Index = () => {
                   </div>
                 )}
                 
-                <div className="flex gap-2">
-                  <Button 
-                    onClick={handleUseTestData} 
-                    variant="outline"
-                    size="sm"
-                    disabled={isProcessing}
-                    className="flex-1 gap-2"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="hidden sm:inline">Loading...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Beaker className="w-4 h-4" />
-                        <span className="hidden sm:inline">Test Data</span>
-                      </>
-                    )}
-                  </Button>
-                  <Button 
-                    onClick={testAPIs} 
-                    variant="outline"
-                    size="sm"
-                    disabled={isTesting}
-                    className="flex-1 gap-2"
-                  >
-                    <TestTube className="w-4 h-4" />
-                    <span className="hidden sm:inline">{isTesting ? 'Testing...' : 'Test APIs'}</span>
-                  </Button>
-                </div>
+                <Button 
+                  onClick={handleUseTestData} 
+                  variant="outline"
+                  size="sm"
+                  disabled={isProcessing}
+                  className="w-full gap-2"
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="hidden sm:inline">Loading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Beaker className="w-4 h-4" />
+                      <span className="hidden sm:inline">Test Data</span>
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
 
