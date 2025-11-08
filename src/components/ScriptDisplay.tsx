@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Highlighter } from 'lucide-react';
+import { FileText, Highlighter, Volume2 } from 'lucide-react';
+import { useToast } from "@/hooks/use-toast";
 
 interface ScriptDisplayProps {
   script: string;
@@ -10,6 +11,7 @@ interface ScriptDisplayProps {
 
 export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
   const [highlightedWords, setHighlightedWords] = useState<string[]>([]);
+  const { toast } = useToast();
 
   const handleWordClick = (word: string) => {
     const cleanWord = word.replace(/[^\w]/g, '').toLowerCase();
@@ -20,6 +22,22 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
     }
   };
 
+  const speakScript = () => {
+    if (!('speechSynthesis' in window)) {
+      toast({
+        title: "Not Supported",
+        description: "Text-to-speech is not supported in your browser.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(script);
+    utterance.rate = 0.8;
+    window.speechSynthesis.speak(utterance);
+  };
+
   const renderScript = () => {
     return script.split(' ').map((word, index) => {
       const cleanWord = word.replace(/[^\w]/g, '').toLowerCase();
@@ -28,8 +46,8 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
       return (
         <span
           key={index}
-          className={`cursor-pointer hover:bg-blue-100 px-1 py-0.5 rounded transition-colors ${
-            isHighlighted ? 'bg-yellow-200 font-semibold' : ''
+          className={`cursor-pointer hover:bg-accent px-1 py-0.5 rounded transition-colors ${
+            isHighlighted ? 'bg-primary/20 font-medium' : ''
           }`}
           onClick={() => handleWordClick(word)}
         >
@@ -40,28 +58,32 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
   };
 
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="w-5 h-5 text-green-500" />
-          Video Script
-        </CardTitle>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setHighlightedWords([])}>
-            <Highlighter className="w-4 h-4 mr-2" />
-            Clear Highlights
-          </Button>
+    <Card className="h-full border-border">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary" />
+            Script
+          </CardTitle>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={speakScript}>
+              <Volume2 className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setHighlightedWords([])}>
+              <Highlighter className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <ScrollArea className="h-64 w-full">
-          <div className="text-base leading-relaxed text-gray-700">
+      <CardContent className="pb-4">
+        <ScrollArea className="h-[300px] md:h-[400px] w-full">
+          <div className="text-sm md:text-base leading-relaxed text-foreground pr-4">
             {renderScript()}
           </div>
         </ScrollArea>
-        <div className="mt-4 text-sm text-gray-500">
-          Click on words to highlight them for study
-        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Tap words to highlight
+        </p>
       </CardContent>
     </Card>
   );

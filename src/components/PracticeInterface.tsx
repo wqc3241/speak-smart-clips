@@ -140,196 +140,177 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
     : practiceSentences.filter(s => s.difficulty === difficultyFilter);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      {/* Reference Panel */}
-      <div className="lg:col-span-1">
-        <Card className="lg:sticky lg:top-4">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-primary" />
+    <div className="space-y-4">
+      {/* Header with Generate Button */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold flex items-center gap-2">
+          <GraduationCap className="w-5 h-5 text-primary" />
+          Practice Sentences
+        </h2>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={generateSentences}
+          disabled={isLoading}
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+          Generate
+        </Button>
+      </div>
+
+      {/* Difficulty Filter */}
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        <Button 
+          variant={difficultyFilter === 'all' ? 'default' : 'outline'} 
+          size="sm"
+          onClick={() => setDifficultyFilter('all')}
+        >
+          All ({practiceSentences.length})
+        </Button>
+        <Button 
+          variant={difficultyFilter === 'beginner' ? 'default' : 'outline'} 
+          size="sm"
+          onClick={() => setDifficultyFilter('beginner')}
+        >
+          Beginner
+        </Button>
+        <Button 
+          variant={difficultyFilter === 'intermediate' ? 'default' : 'outline'} 
+          size="sm"
+          onClick={() => setDifficultyFilter('intermediate')}
+        >
+          Intermediate
+        </Button>
+        <Button 
+          variant={difficultyFilter === 'advanced' ? 'default' : 'outline'} 
+          size="sm"
+          onClick={() => setDifficultyFilter('advanced')}
+        >
+          Advanced
+        </Button>
+      </div>
+
+      {/* Practice Sentences List */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="p-4">
+              <Skeleton className="h-6 w-3/4 mb-2" />
+              <Skeleton className="h-4 w-full mb-3" />
+              <div className="flex gap-2">
+                <Skeleton className="h-6 w-16" />
+                <Skeleton className="h-6 w-16" />
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : filteredSentences.length === 0 ? (
+        <Card className="p-8 text-center bg-muted/30 border-border">
+          <GraduationCap className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+          <h3 className="text-base font-semibold text-muted-foreground mb-1">
+            {practiceSentences.length === 0 
+              ? 'No practice sentences yet'
+              : 'No sentences at this level'
+            }
+          </h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            {practiceSentences.length === 0
+              ? 'Generate sentences to start practicing'
+              : 'Try a different difficulty level'
+            }
+          </p>
+          {practiceSentences.length === 0 && (
+            <Button onClick={generateSentences} size="sm">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Generate Sentences
+            </Button>
+          )}
+        </Card>
+      ) : (
+        <ScrollArea className="h-[calc(100vh-280px)] md:h-[600px]">
+          <div className="space-y-3 pr-4">
+            {filteredSentences.map((sentence, index) => (
+              <Card key={index} className="p-4 border-border hover:border-primary/50 transition-colors">
+                {/* Sentence with Audio */}
+                <div className="flex items-start gap-3 mb-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 mt-0.5"
+                    onClick={() => speak(sentence.text)}
+                    disabled={currentSpeaking === sentence.text}
+                  >
+                    <Volume2 className={`h-4 w-4 ${
+                      currentSpeaking === sentence.text ? 'text-primary' : 'text-muted-foreground'
+                    }`} />
+                  </Button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-base font-medium text-foreground mb-1 break-words">
+                      {sentence.text}
+                    </p>
+                    <p className="text-sm text-muted-foreground italic break-words">
+                      {sentence.translation}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tags */}
+                <div className="flex flex-wrap gap-1.5 items-center mt-3">
+                  <Badge className={getDifficultyColor(sentence.difficulty)} variant="outline">
+                    {sentence.difficulty}
+                  </Badge>
+                  
+                  {sentence.usedVocabulary.length > 0 && (
+                    <>
+                      {sentence.usedVocabulary.slice(0, 3).map((word, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">
+                          {word}
+                        </Badge>
+                      ))}
+                      {sentence.usedVocabulary.length > 3 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{sentence.usedVocabulary.length - 3}
+                        </Badge>
+                      )}
+                    </>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
+
+      {/* Hidden Reference Panel for larger screens */}
+      <div className="hidden xl:block">
+        <Card className="xl:sticky xl:top-4 border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-primary" />
               Reference
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[500px] pr-4">
-              {/* Vocabulary Section */}
-              <div className="mb-6">
-                <h4 className="font-semibold text-sm text-muted-foreground mb-3">VOCABULARY</h4>
-                <div className="space-y-2">
-                  {project.vocabulary?.map((item: any, index: number) => (
-                    <div key={index} className="text-xs">
-                      <span className="font-medium text-foreground">{item.word}</span>
-                      <p className="text-muted-foreground">{item.definition}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <Separator className="my-4" />
-
-              {/* Grammar Section */}
-              <div>
-                <h4 className="font-semibold text-sm text-muted-foreground mb-3">GRAMMAR</h4>
-                <div className="space-y-3">
-                  {project.grammar?.map((item: any, index: number) => (
-                    <div key={index} className="text-xs">
-                      <span className="font-medium text-foreground">{item.rule}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Practice Sentences Panel */}
-      <div className="lg:col-span-3">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-primary" />
-                Practice Sentences
-              </CardTitle>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={generateSentences}
-                disabled={isLoading}
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Generate More
-              </Button>
-            </div>
-
-            {/* Difficulty Filter */}
-            <div className="flex gap-2 mt-4">
-              <Button 
-                variant={difficultyFilter === 'all' ? 'default' : 'outline'} 
-                size="sm"
-                onClick={() => setDifficultyFilter('all')}
-              >
-                All ({practiceSentences.length})
-              </Button>
-              <Button 
-                variant={difficultyFilter === 'beginner' ? 'default' : 'outline'} 
-                size="sm"
-                onClick={() => setDifficultyFilter('beginner')}
-              >
-                Beginner
-              </Button>
-              <Button 
-                variant={difficultyFilter === 'intermediate' ? 'default' : 'outline'} 
-                size="sm"
-                onClick={() => setDifficultyFilter('intermediate')}
-              >
-                Intermediate
-              </Button>
-              <Button 
-                variant={difficultyFilter === 'advanced' ? 'default' : 'outline'} 
-                size="sm"
-                onClick={() => setDifficultyFilter('advanced')}
-              >
-                Advanced
-              </Button>
-            </div>
-          </CardHeader>
-
-          <CardContent>
-            {isLoading ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <Card key={i} className="p-4">
-                    <Skeleton className="h-6 w-3/4 mb-2" />
-                    <Skeleton className="h-4 w-full mb-3" />
-                    <div className="flex gap-2">
-                      <Skeleton className="h-6 w-16" />
-                      <Skeleton className="h-6 w-16" />
-                    </div>
-                  </Card>
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="space-y-3">
+                {project.vocabulary?.slice(0, 5).map((item: any, index: number) => (
+                  <div key={index} className="text-xs">
+                    <span className="font-medium text-foreground">{item.word}</span>
+                    <p className="text-muted-foreground">{item.definition}</p>
+                  </div>
                 ))}
               </div>
-            ) : filteredSentences.length === 0 ? (
-              <Card className="p-8 text-center bg-muted">
-                <GraduationCap className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold text-muted-foreground mb-2">
-                  {practiceSentences.length === 0 
-                    ? 'No practice sentences yet'
-                    : 'No sentences at this difficulty level'
-                  }
-                </h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {practiceSentences.length === 0
-                    ? 'Click "Generate More" to create practice sentences'
-                    : 'Try a different difficulty level'
-                  }
-                </p>
-                {practiceSentences.length === 0 && (
-                  <Button onClick={generateSentences}>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Generate Practice Sentences
-                  </Button>
-                )}
-              </Card>
-            ) : (
-              <ScrollArea className="h-[600px] pr-4">
-                <div className="space-y-4">
-                  {filteredSentences.map((sentence, index) => (
-                    <Card key={index} className="p-4 hover:shadow-md transition-shadow">
-                      {/* Sentence Text with Pronunciation */}
-                      <div className="flex items-start gap-3 mb-3">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 flex-shrink-0 mt-1"
-                          onClick={() => speak(sentence.text)}
-                          disabled={currentSpeaking === sentence.text}
-                        >
-                          <Volume2 className={`h-5 w-5 ${currentSpeaking === sentence.text ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
-                        </Button>
-                        <div className="flex-1">
-                          <p className="text-lg font-medium text-foreground mb-1">
-                            {sentence.text}
-                          </p>
-                          <p className="text-sm text-muted-foreground italic">
-                            {sentence.translation}
-                          </p>
-                        </div>
-                      </div>
 
-                      {/* Tags and Difficulty */}
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <Badge className={getDifficultyColor(sentence.difficulty)} variant="outline">
-                          {sentence.difficulty}
-                        </Badge>
-                        
-                        {sentence.usedVocabulary.length > 0 && (
-                          <>
-                            <span className="text-xs text-muted-foreground">Uses:</span>
-                            {sentence.usedVocabulary.map((word, i) => (
-                              <Badge key={i} variant="secondary" className="text-xs">
-                                {word}
-                              </Badge>
-                            ))}
-                          </>
-                        )}
-                        
-                        {sentence.usedGrammar.length > 0 && (
-                          <>
-                            {sentence.usedGrammar.map((grammar, i) => (
-                              <Badge key={i} className="text-xs bg-purple-100 text-purple-800 border-purple-200" variant="outline">
-                                {grammar}
-                              </Badge>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
+              <Separator className="my-3" />
+
+              <div className="space-y-2">
+                {project.grammar?.slice(0, 3).map((item: any, index: number) => (
+                  <div key={index} className="text-xs">
+                    <span className="font-medium text-foreground">{item.rule}</span>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
           </CardContent>
         </Card>
       </div>

@@ -104,7 +104,6 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
       setProjects(projects.filter(p => p.id !== id));
       toast({ 
         title: "Project deleted",
-        description: "The project has been removed successfully.",
       });
     }
   };
@@ -136,116 +135,126 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    
     return date.toLocaleDateString('en-US', {
       month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+      day: 'numeric'
     });
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <History className="w-5 h-5 text-purple-500" />
-            My Language Learning Projects
-          </CardTitle>
-          <div className="flex gap-4 items-center">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <Input
-                placeholder="Search projects..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Badge variant="secondary">{projects.length} projects</Badge>
-          </div>
-        </CardHeader>
-        
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center h-96">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-          ) : (
-            <ScrollArea className="h-96">
-              <div className="space-y-4">
-                {filteredProjects.map((project) => (
-                  <Card key={project.id} className="border border-gray-200 hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="font-semibold text-lg">{project.title}</h3>
-                            {project.is_favorite && (
-                              <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground mb-3">{project.youtube_url}</p>
-                          <div className="flex gap-4 text-sm text-muted-foreground">
-                            <span>Created: {formatDate(project.created_at)}</span>
-                            <span>Last accessed: {formatDate(project.last_accessed)}</span>
-                          </div>
-                          <div className="flex gap-2 mt-2">
-                            <Badge variant="outline">
-                              {project.vocabulary_count || 0} words
-                            </Badge>
-                            <Badge variant="outline">
-                              {project.grammar_count || 0} grammar points
-                            </Badge>
-                          </div>
-                        </div>
-                        <div className="flex gap-2 ml-4">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleFavorite(project.id)}
-                            title={project.is_favorite ? "Remove from favorites" : "Add to favorites"}
-                          >
-                            <Star className={`w-4 h-4 ${project.is_favorite ? 'text-yellow-500 fill-current' : 'text-gray-400'}`} />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => loadProject(project.id)}
-                            title="Load this project"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteProject(project.id)}
-                            className="text-red-500 hover:text-red-700"
-                            title="Delete this project"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold flex items-center gap-2">
+          <History className="w-5 h-5 text-primary" />
+          Projects
+        </h2>
+        <Badge variant="secondary">{projects.length}</Badge>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search projects..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
+      {/* Projects List */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-96">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : filteredProjects.length === 0 ? (
+        <Card className="text-center py-16 border-none shadow-none">
+          <CardContent>
+            <History className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold text-muted-foreground mb-2">
+              No projects found
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {searchTerm ? 'Try adjusting your search' : 'Create your first project!'}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <ScrollArea className="h-[calc(100vh-280px)] md:h-[600px]">
+          <div className="space-y-3 pr-4">
+            {filteredProjects.map((project) => (
+              <Card key={project.id} className="border-border hover:border-primary/50 transition-colors">
+                <CardContent className="p-4">
+                  {/* Header with Title and Favorite */}
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-base truncate">{project.title}</h3>
+                        {project.is_favorite && (
+                          <Star className="w-3.5 h-3.5 text-yellow-500 fill-current shrink-0" />
+                        )}
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </ScrollArea>
-          )}
-          
-          {filteredProjects.length === 0 && (
-            <div className="text-center py-8">
-              <History className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-600 mb-2">
-                No projects found
-              </h3>
-              <p className="text-gray-500">
-                {searchTerm ? 'Try adjusting your search terms' : 'Create your first language learning project!'}
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                      {project.detected_language && (
+                        <Badge variant="secondary" className="text-xs mb-2">
+                          {project.detected_language}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="flex gap-3 text-xs text-muted-foreground mb-3">
+                    <span>{project.vocabulary_count || 0} words</span>
+                    <span>•</span>
+                    <span>{project.grammar_count || 0} grammar</span>
+                    <span>•</span>
+                    <span>{formatDate(project.last_accessed)}</span>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadProject(project.id)}
+                      className="flex-1"
+                    >
+                      <Eye className="w-3.5 h-3.5 mr-2" />
+                      Open
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleFavorite(project.id)}
+                    >
+                      <Star className={`w-3.5 h-3.5 ${
+                        project.is_favorite ? 'text-yellow-500 fill-current' : 'text-muted-foreground'
+                      }`} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteProject(project.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
     </div>
   );
 };

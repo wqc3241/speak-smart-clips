@@ -2,26 +2,33 @@ import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Book, GraduationCap, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
 interface VocabularyItem {
   word: string;
   definition: string;
   difficulty: "beginner" | "intermediate" | "advanced";
 }
+
 interface GrammarItem {
   rule: string;
   example: string;
   explanation: string;
 }
+
 interface VocabularyPanelProps {
   vocabulary: VocabularyItem[];
   grammar: GrammarItem[];
   detectedLanguage?: string;
 }
-export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, grammar, detectedLanguage }) => {
+
+export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ 
+  vocabulary, 
+  grammar, 
+  detectedLanguage 
+}) => {
   const [speakingWord, setSpeakingWord] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -50,18 +57,13 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
       return;
     }
 
-    // Cancel any ongoing speech
     window.speechSynthesis.cancel();
-
     setSpeakingWord(text);
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = getLanguageCode(detectedLanguage);
-    utterance.rate = 0.8; // Slightly slower for learning
+    utterance.rate = 0.8;
     
-    utterance.onend = () => {
-      setSpeakingWord(null);
-    };
-
+    utterance.onend = () => setSpeakingWord(null);
     utterance.onerror = () => {
       setSpeakingWord(null);
       toast({
@@ -76,44 +78,46 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
-      case "beginner":
-        return "bg-green-100 text-green-800";
-      case "intermediate":
-        return "bg-yellow-100 text-yellow-800";
-      case "advanced":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
+      case "beginner": return "bg-green-500/10 text-green-700 dark:text-green-400";
+      case "intermediate": return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400";
+      case "advanced": return "bg-red-500/10 text-red-700 dark:text-red-400";
+      default: return "bg-muted text-muted-foreground";
     }
   };
+
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Book className="w-5 h-5 text-blue-500" />
-            Key Vocabulary
+      {/* Vocabulary Card */}
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Book className="w-5 h-5 text-primary" />
+            Vocabulary
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-48">
-            <div className="space-y-3">
+        <CardContent className="pb-4">
+          <ScrollArea className="h-[250px] md:h-[300px]">
+            <div className="space-y-2 pr-4">
               {vocabulary.map((item, index) => (
-                <div key={index} className="p-3 bg-muted rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold text-lg">{item.word}</span>
+                <div key={index} className="p-3 bg-accent/50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-semibold text-base">{item.word}</span>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7"
+                      className="h-6 w-6 shrink-0"
                       onClick={() => speak(item.word)}
                       disabled={speakingWord === item.word}
                     >
-                      <Volume2 className={`h-4 w-4 ${speakingWord === item.word ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
+                      <Volume2 className={`h-3.5 w-3.5 ${
+                        speakingWord === item.word ? 'text-primary' : 'text-muted-foreground'
+                      }`} />
                     </Button>
-                    <Badge className={getDifficultyColor(item.difficulty)}>{item.difficulty}</Badge>
+                    <Badge className={getDifficultyColor(item.difficulty)} variant="outline">
+                      {item.difficulty}
+                    </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{item.definition}</p>
+                  <p className="text-xs text-muted-foreground">{item.definition}</p>
                 </div>
               ))}
             </div>
@@ -121,32 +125,35 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ vocabulary, gr
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-purple-500" />
-            Key Grammar
+      {/* Grammar Card */}
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <GraduationCap className="w-5 h-5 text-primary" />
+            Grammar
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-48">
-            <div className="space-y-3">
+        <CardContent className="pb-4">
+          <ScrollArea className="h-[250px] md:h-[300px]">
+            <div className="space-y-2 pr-4">
               {grammar.map((item, index) => (
-                <div key={index} className="p-3 bg-muted rounded-lg">
-                  <h4 className="font-semibold text-base text-primary mb-1">{item.rule}</h4>
-                  <div className="flex items-start gap-2 mb-2">
-                    <p className="text-sm italic text-muted-foreground flex-1">"{item.example}"</p>
+                <div key={index} className="p-3 bg-accent/50 rounded-lg">
+                  <h4 className="font-semibold text-sm text-foreground mb-1">{item.rule}</h4>
+                  <div className="flex items-start gap-2 mb-1">
+                    <p className="text-xs italic text-muted-foreground flex-1">"{item.example}"</p>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 flex-shrink-0"
+                      className="h-5 w-5 shrink-0"
                       onClick={() => speak(item.example)}
                       disabled={speakingWord === item.example}
                     >
-                      <Volume2 className={`h-3.5 w-3.5 ${speakingWord === item.example ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
+                      <Volume2 className={`h-3 w-3 ${
+                        speakingWord === item.example ? 'text-primary' : 'text-muted-foreground'
+                      }`} />
                     </Button>
                   </div>
-                  <p className="text-sm text-foreground">{item.explanation}</p>
+                  <p className="text-xs text-foreground">{item.explanation}</p>
                 </div>
               ))}
             </div>

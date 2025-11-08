@@ -1,7 +1,5 @@
-
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Play } from 'lucide-react';
 
 interface VideoPreviewProps {
@@ -17,32 +15,28 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({ url }) => {
   const videoId = getVideoId(url);
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Play className="w-5 h-5 text-blue-500" />
-          Video Preview
+    <Card className="w-full border-border">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Play className="w-5 h-5 text-primary" />
+          Preview
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pb-4">
         {videoId ? (
-          <div className="aspect-video w-full">
+          <div className="aspect-video w-full rounded-lg overflow-hidden">
             <iframe
               src={`https://www.youtube.com/embed/${videoId}`}
-              className="w-full h-full rounded-lg"
+              className="w-full h-full"
               allowFullScreen
               title="YouTube video preview"
             />
           </div>
         ) : (
-          <div className="aspect-video w-full bg-gray-100 rounded-lg flex items-center justify-center">
-            <p className="text-gray-500">Invalid YouTube URL</p>
+          <div className="aspect-video w-full bg-muted rounded-lg flex items-center justify-center">
+            <p className="text-sm text-muted-foreground">Invalid YouTube URL</p>
           </div>
         )}
-        <div className="mt-4 flex gap-2">
-          <Badge variant="secondary">Processing...</Badge>
-          <Badge variant="outline">English</Badge>
-        </div>
       </CardContent>
     </Card>
   );

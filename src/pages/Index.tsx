@@ -423,83 +423,95 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Language Learning Studio
+    <div className="min-h-screen bg-background pb-20 md:pb-8">
+      {/* Header - Desktop only */}
+      <header className="hidden md:block border-b bg-card/50 backdrop-blur sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4">
+          <h1 className="text-2xl font-bold text-foreground">
+            Speak Smart Clips
           </h1>
-          <p className="text-lg text-gray-600">
-            Transform YouTube videos into interactive language lessons
+          <p className="text-sm text-muted-foreground">
+            Learn languages from YouTube videos
           </p>
         </div>
+      </header>
 
+      {/* Mobile Header */}
+      <header className="md:hidden border-b bg-card sticky top-0 z-10 backdrop-blur">
+        <div className="px-4 py-3">
+          <h1 className="text-lg font-bold text-foreground">Speak Smart Clips</h1>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-6 md:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-6">
-            <TabsTrigger value="input" className="flex items-center gap-2">
+          {/* Desktop Tab Navigation */}
+          <TabsList className="hidden md:grid w-full grid-cols-4 mb-6 bg-muted">
+            <TabsTrigger value="input" className="gap-2">
               <Youtube className="w-4 h-4" />
-              Video Input
+              <span>Input</span>
             </TabsTrigger>
-            <TabsTrigger value="lesson" className="flex items-center gap-2">
+            <TabsTrigger value="lesson" className="gap-2">
               <BookOpen className="w-4 h-4" />
-              Study
+              <span>Study</span>
             </TabsTrigger>
-            <TabsTrigger value="conversation" className="flex items-center gap-2">
+            <TabsTrigger value="conversation" className="gap-2">
               <MessageCircle className="w-4 h-4" />
-              Practice
+              <span>Practice</span>
             </TabsTrigger>
-            <TabsTrigger value="projects" className="flex items-center gap-2">
+            <TabsTrigger value="projects" className="gap-2">
               <History className="w-4 h-4" />
-              Projects
+              <span>Projects</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="input" className="space-y-6">
-            <Card className="w-full max-w-2xl mx-auto">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Youtube className="w-5 h-5 text-red-500" />
-                  Add YouTube Video
+          <TabsContent value="input" className="space-y-4 md:space-y-6">
+            <Card className="border-none shadow-none md:border md:shadow-sm">
+              <CardHeader className="px-0 md:px-6">
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <Youtube className="w-5 h-5 text-primary" />
+                  Add Video
                 </CardTitle>
                 <CardDescription>
-                  Paste a YouTube URL to create a new language lesson
+                  Paste a YouTube URL to start learning
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3 px-0 md:px-6">
                 <Input
-                  placeholder="https://www.youtube.com/watch?v=..."
+                  placeholder="YouTube video URL..."
                   value={youtubeUrl}
                   onChange={(e) => setYoutubeUrl(e.target.value)}
-                  className="text-lg"
+                  className="h-12 text-base"
                 />
+                <Button 
+                  onClick={handleUrlSubmit} 
+                  className="w-full h-12 text-base" 
+                  size="lg"
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? 'Processing...' : 'Process Video'}
+                </Button>
+                
                 <div className="flex gap-2">
                   <Button 
-                    onClick={handleUrlSubmit} 
-                    className="flex-1" 
-                    size="lg"
-                    disabled={isProcessing}
-                  >
-                    {isProcessing ? 'Processing Video...' : 'Process Video'}
-                  </Button>
-                  <Button 
                     onClick={handleUseTestData} 
-                    variant="secondary"
-                    size="lg"
+                    variant="outline"
+                    size="sm"
                     disabled={isProcessing}
-                    className="flex items-center gap-2"
+                    className="flex-1 gap-2"
                   >
                     <Beaker className="w-4 h-4" />
-                    Use Test Data
+                    <span className="hidden sm:inline">Test Data</span>
                   </Button>
                   <Button 
                     onClick={testAPIs} 
                     variant="outline"
-                    size="lg"
+                    size="sm"
                     disabled={isTesting}
-                    className="flex items-center gap-2"
+                    className="flex-1 gap-2"
                   >
                     <TestTube className="w-4 h-4" />
-                    {isTesting ? 'Testing...' : 'Test APIs'}
+                    <span className="hidden sm:inline">{isTesting ? 'Testing...' : 'Test APIs'}</span>
                   </Button>
                 </div>
               </CardContent>
@@ -510,48 +522,52 @@ const Index = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="lesson" className="space-y-6">
+          <TabsContent value="lesson" className="space-y-4 md:space-y-6">
             {currentProject ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <ScriptDisplay script={currentProject.script} />
-                  <Button className="w-full" variant="outline" onClick={saveCurrentProject}>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Project
-                  </Button>
-                </div>
-                <div className="space-y-4">
-            <div className="space-y-4">
-              {currentProject.detectedLanguage && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>Detected Language:</span>
-                  <Badge variant="secondary">{currentProject.detectedLanguage}</Badge>
-                </div>
-              )}
-            <VocabularyPanel 
-              vocabulary={currentProject.vocabulary} 
-              grammar={currentProject.grammar}
-              detectedLanguage={currentProject.detectedLanguage}
-            />
-            </div>
+              <div className="space-y-4">
+                {/* Save Button - Top on mobile */}
+                <Button className="w-full md:hidden" onClick={saveCurrentProject}>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Project
+                </Button>
+
+                {/* Language Badge */}
+                {currentProject.detectedLanguage && (
+                  <Badge variant="secondary" className="mb-2">{currentProject.detectedLanguage}</Badge>
+                )}
+
+                {/* Content Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                  <div className="space-y-4">
+                    <ScriptDisplay script={currentProject.script} />
+                    <Button className="w-full hidden md:flex" variant="outline" onClick={saveCurrentProject}>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Project
+                    </Button>
+                  </div>
+                  <VocabularyPanel 
+                    vocabulary={currentProject.vocabulary} 
+                    grammar={currentProject.grammar}
+                    detectedLanguage={currentProject.detectedLanguage}
+                  />
                 </div>
               </div>
             ) : (
-              <Card className="text-center py-12">
+              <Card className="text-center py-16 border-none shadow-none">
                 <CardContent>
-                  <BookOpen className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-xl font-semibold text-gray-600 mb-2">
-                    No lesson selected
+                  <BookOpen className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">
+                    No lesson yet
                   </h3>
-                  <p className="text-gray-500">
-                    Process a YouTube video to start studying
+                  <p className="text-sm text-muted-foreground">
+                    Add a YouTube video to start learning
                   </p>
                 </CardContent>
               </Card>
             )}
           </TabsContent>
 
-          <TabsContent value="conversation" className="space-y-6">
+          <TabsContent value="conversation" className="space-y-4 md:space-y-6">
             {currentProject ? (
               <PracticeInterface 
                 project={currentProject} 
@@ -560,25 +576,67 @@ const Index = () => {
                 }}
               />
             ) : (
-              <Card className="text-center py-12">
+              <Card className="text-center py-16 border-none shadow-none">
                 <CardContent>
-                  <MessageCircle className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-xl font-semibold text-gray-600 mb-2">
-                    No conversation available
+                  <MessageCircle className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">
+                    No lesson to practice
                   </h3>
-                  <p className="text-gray-500">
-                    Complete a lesson to start practicing
+                  <p className="text-sm text-muted-foreground">
+                    Complete a lesson first
                   </p>
                 </CardContent>
               </Card>
             )}
           </TabsContent>
 
-          <TabsContent value="projects" className="space-y-6">
+          <TabsContent value="projects" className="space-y-4 md:space-y-6">
             <ProjectManager onLoadProject={loadProject} />
           </TabsContent>
         </Tabs>
-      </div>
+      </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t z-20">
+        <div className="grid grid-cols-4">
+          <button
+            onClick={() => setActiveTab('input')}
+            className={`flex flex-col items-center gap-1 py-3 ${
+              activeTab === 'input' ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          >
+            <Youtube className="w-5 h-5" />
+            <span className="text-xs">Input</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('lesson')}
+            className={`flex flex-col items-center gap-1 py-3 ${
+              activeTab === 'lesson' ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          >
+            <BookOpen className="w-5 h-5" />
+            <span className="text-xs">Study</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('conversation')}
+            className={`flex flex-col items-center gap-1 py-3 ${
+              activeTab === 'conversation' ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          >
+            <MessageCircle className="w-5 h-5" />
+            <span className="text-xs">Practice</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('projects')}
+            className={`flex flex-col items-center gap-1 py-3 ${
+              activeTab === 'projects' ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          >
+            <History className="w-5 h-5" />
+            <span className="text-xs">Projects</span>
+          </button>
+        </div>
+      </nav>
     </div>
   );
 };
