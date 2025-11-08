@@ -8,6 +8,7 @@ import { Volume2, RefreshCw, BookOpen, GraduationCap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 interface PracticeSentence {
   text: string;
@@ -140,7 +141,7 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
     : practiceSentences.filter(s => s.difficulty === difficultyFilter);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
       {/* Header with Generate Button */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold flex items-center gap-2">
@@ -281,38 +282,99 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
         </ScrollArea>
       )}
 
-      {/* Hidden Reference Panel for larger screens */}
+      {/* Desktop Reference Panel - Show ALL items */}
       <div className="hidden xl:block">
         <Card className="xl:sticky xl:top-4 border-border">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-primary" />
-              Reference
+              Reference ({project.vocabulary?.length || 0} vocab, {project.grammar?.length || 0} grammar)
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-3">
-                {project.vocabulary?.slice(0, 5).map((item: any, index: number) => (
-                  <div key={index} className="text-xs">
+            <ScrollArea className="h-[600px] pr-4">
+              <div className="space-y-3 mb-4">
+                <h4 className="text-sm font-semibold text-muted-foreground">Vocabulary</h4>
+                {project.vocabulary?.map((item: any, index: number) => (
+                  <div key={index} className="text-sm p-2 bg-muted/30 rounded">
                     <span className="font-medium text-foreground">{item.word}</span>
-                    <p className="text-muted-foreground">{item.definition}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{item.definition}</p>
+                    <Badge variant="outline" className="mt-1 text-xs">
+                      {item.difficulty}
+                    </Badge>
                   </div>
                 ))}
               </div>
 
-              <Separator className="my-3" />
+              <Separator className="my-4" />
 
-              <div className="space-y-2">
-                {project.grammar?.slice(0, 3).map((item: any, index: number) => (
-                  <div key={index} className="text-xs">
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-muted-foreground">Grammar</h4>
+                {project.grammar?.map((item: any, index: number) => (
+                  <div key={index} className="text-sm p-2 bg-muted/30 rounded">
                     <span className="font-medium text-foreground">{item.rule}</span>
+                    <p className="text-xs text-muted-foreground mt-1">{item.explanation}</p>
+                    <p className="text-xs italic text-primary/70 mt-1">{item.example}</p>
                   </div>
                 ))}
               </div>
             </ScrollArea>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Mobile Reference Sheet */}
+      <div className="xl:hidden fixed bottom-24 right-4 z-10">
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button size="lg" className="rounded-full shadow-lg">
+              <BookOpen className="w-5 h-5 mr-2" />
+              Reference
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="h-[80vh]">
+            <SheetHeader>
+              <SheetTitle>Vocabulary & Grammar Reference</SheetTitle>
+            </SheetHeader>
+            <ScrollArea className="h-full mt-4 pr-4">
+              <div className="space-y-4">
+                {/* Full vocabulary list */}
+                <div>
+                  <h3 className="font-semibold mb-3 text-base flex items-center gap-2">
+                    <BookOpen className="w-4 h-4" />
+                    Vocabulary ({project.vocabulary?.length || 0})
+                  </h3>
+                  {project.vocabulary?.map((item: any, index: number) => (
+                    <div key={index} className="mb-3 p-3 bg-muted/50 rounded-lg">
+                      <div className="font-medium text-base">{item.word}</div>
+                      <div className="text-sm text-muted-foreground mt-1">{item.definition}</div>
+                      <Badge variant="outline" className="mt-2 text-xs">
+                        {item.difficulty}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+                
+                <Separator className="my-4" />
+                
+                {/* Full grammar list */}
+                <div>
+                  <h3 className="font-semibold mb-3 text-base flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4" />
+                    Grammar ({project.grammar?.length || 0})
+                  </h3>
+                  {project.grammar?.map((item: any, index: number) => (
+                    <div key={index} className="mb-3 p-3 bg-muted/50 rounded-lg">
+                      <div className="font-medium text-base mb-1">{item.rule}</div>
+                      <div className="text-xs text-muted-foreground mb-2">{item.explanation}</div>
+                      <div className="text-sm italic text-primary/80">{item.example}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </ScrollArea>
+          </SheetContent>
+        </Sheet>
       </div>
     </div>
   );
