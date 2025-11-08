@@ -101,22 +101,75 @@ const Index = () => {
   };
 
   const analyzeContent = (script: string) => {
-    // Enhanced content analysis - in a real app, this could use NLP services
-    const words = script.toLowerCase().split(/\s+/);
-    const uniqueWords = [...new Set(words)].filter(word => word.length > 3);
+    // Split into sentences for grammar analysis
+    const sentences = script.match(/[^.!?]+[.!?]+/g) || [];
     
-    // Generate vocabulary based on actual content
-    const vocabulary = uniqueWords.slice(0, 10).map(word => ({
-      word: word.replace(/[^\w]/g, ''),
+    // Deduplicate vocabulary: extract unique words, clean and normalize
+    const words = script.toLowerCase().split(/\s+/);
+    const uniqueWordsMap = new Map<string, string>();
+    
+    words.forEach(word => {
+      const cleaned = word.replace(/[^\w]/g, '');
+      if (cleaned.length > 4 && !uniqueWordsMap.has(cleaned)) {
+        uniqueWordsMap.set(cleaned, word);
+      }
+    });
+    
+    const vocabulary = Array.from(uniqueWordsMap.keys()).slice(0, 15).map(word => ({
+      word: word,
       definition: `Definition for "${word}" - this would come from a dictionary API`,
-      difficulty: Math.random() > 0.6 ? 'advanced' : Math.random() > 0.3 ? 'intermediate' : 'beginner'
+      difficulty: (word.length > 8 ? 'advanced' : word.length > 6 ? 'intermediate' : 'beginner') as 'beginner' | 'intermediate' | 'advanced'
     }));
     
-    const grammar = [
-      { rule: "Present Perfect", example: "has been", explanation: "Used for actions continuing to present" },
-      { rule: "Past Simple", example: "was/were", explanation: "Used for completed actions in the past" },
-      { rule: "Modal Verbs", example: "can/could/would", explanation: "Express possibility, ability, or permission" }
-    ];
+    // Deduplicate grammar: extract unique patterns from actual sentences
+    const grammarMap = new Map<string, { rule: string; example: string; explanation: string }>();
+    
+    sentences.forEach(sentence => {
+      const trimmed = sentence.trim();
+      if (trimmed.length < 10) return;
+      
+      // Detect present perfect (has/have + past participle)
+      if (/\b(has|have)\s+\w+ed\b/i.test(trimmed) && !grammarMap.has('Present Perfect')) {
+        const match = trimmed.match(/\b(has|have)\s+\w+ed\b/i);
+        grammarMap.set('Present Perfect', {
+          rule: 'Present Perfect',
+          example: match ? match[0] : 'has/have + past participle',
+          explanation: 'Used for actions continuing to present or with present relevance'
+        });
+      }
+      
+      // Detect past simple (was/were, regular past tense)
+      if (/\b(was|were|walked|talked|looked)\b/i.test(trimmed) && !grammarMap.has('Past Simple')) {
+        const match = trimmed.match(/\b(was|were|\w+ed)\b/i);
+        grammarMap.set('Past Simple', {
+          rule: 'Past Simple',
+          example: match ? match[0] : 'was/were',
+          explanation: 'Used for completed actions in the past'
+        });
+      }
+      
+      // Detect modal verbs
+      if (/\b(can|could|would|should|will|may|might|must)\b/i.test(trimmed) && !grammarMap.has('Modal Verbs')) {
+        const match = trimmed.match(/\b(can|could|would|should|will|may|might|must)\b/i);
+        grammarMap.set('Modal Verbs', {
+          rule: 'Modal Verbs',
+          example: match ? match[0] : 'can/could/would',
+          explanation: 'Express possibility, ability, permission, or obligation'
+        });
+      }
+      
+      // Detect present continuous (am/is/are + -ing)
+      if (/\b(am|is|are)\s+\w+ing\b/i.test(trimmed) && !grammarMap.has('Present Continuous')) {
+        const match = trimmed.match(/\b(am|is|are)\s+\w+ing\b/i);
+        grammarMap.set('Present Continuous', {
+          rule: 'Present Continuous',
+          example: match ? match[0] : 'am/is/are + -ing',
+          explanation: 'Used for actions happening now or around now'
+        });
+      }
+    });
+    
+    const grammar = Array.from(grammarMap.values());
     
     return { vocabulary, grammar };
   };
