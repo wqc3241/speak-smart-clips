@@ -46,24 +46,24 @@ const Auth = () => {
 
   // Check if already logged in and detect password recovery
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session && !isRecoveryMode) {
-        navigate("/");
-      }
-    };
-    checkSession();
-
-    // Listen for password recovery event
+    // 1. Set up auth state listener FIRST to catch PASSWORD_RECOVERY event
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'PASSWORD_RECOVERY') {
           setIsRecoveryMode(true);
-        } else if (event === 'SIGNED_IN' && session) {
+        } else if (event === 'SIGNED_IN' && session && !isRecoveryMode) {
           navigate("/");
         }
       }
     );
+
+    // 2. THEN check for existing session (async with .then() to allow event listener to fire first)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      // Only redirect if we have a session AND we're not in recovery mode
+      if (session && !isRecoveryMode) {
+        navigate("/");
+      }
+    });
 
     return () => subscription.unsubscribe();
   }, [navigate, isRecoveryMode]);
