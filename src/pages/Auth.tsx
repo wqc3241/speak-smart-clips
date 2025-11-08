@@ -26,6 +26,10 @@ const Auth = () => {
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  
+  // Forgot password state
+  const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
 
   // Form state
   const [email, setEmail] = useState("");
@@ -217,6 +221,44 @@ const Auth = () => {
     setLoading(false);
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validate email
+    const emailResult = emailSchema.safeParse(resetEmail);
+    if (!emailResult.success) {
+      toast({
+        title: "Invalid email",
+        description: emailResult.error.errors[0].message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    const redirectUrl = `${window.location.origin}/auth`;
+    
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+      redirectTo: redirectUrl,
+    });
+
+    if (error) {
+      toast({
+        title: "Password reset failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Check your email",
+        description: "We've sent you a password reset link. Please check your email.",
+      });
+      setIsForgotPasswordMode(false);
+      setResetEmail("");
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-blue-50 p-4">
       <Card className="w-full max-w-md">
@@ -225,12 +267,18 @@ const Auth = () => {
             <BookOpen className="w-12 h-12 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold">
-            {isRecoveryMode ? "Reset Your Password" : "Language Learning Platform"}
+            {isRecoveryMode 
+              ? "Reset Your Password" 
+              : isForgotPasswordMode 
+                ? "Forgot Password" 
+                : "Language Learning Platform"}
           </CardTitle>
           <CardDescription>
             {isRecoveryMode 
               ? "Enter your new password below" 
-              : "Sign in to access your learning projects"}
+              : isForgotPasswordMode
+                ? "Enter your email to receive a password reset link"
+                : "Sign in to access your learning projects"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -274,6 +322,43 @@ const Auth = () => {
                 )}
               </Button>
             </form>
+          ) : isForgotPasswordMode ? (
+            // Forgot Password Form
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="reset-email">Email</Label>
+                <Input
+                  id="reset-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  disabled={loading}
+                  required
+                />
+              </div>
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending reset link...
+                  </>
+                ) : (
+                  "Send Reset Link"
+                )}
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => setIsForgotPasswordMode(false)}
+                disabled={loading}
+              >
+                Back to Sign In
+              </Button>
+            </form>
           ) : (
             <>
             <Tabs value={mode} onValueChange={(v) => setMode(v as typeof mode)}>
@@ -315,6 +400,18 @@ const Auth = () => {
                   {errors.password && (
                     <p className="text-sm text-destructive">{errors.password}</p>
                   )}
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="px-0 font-normal text-sm"
+                    onClick={() => setIsForgotPasswordMode(true)}
+                    disabled={loading}
+                  >
+                    Forgot Password?
+                  </Button>
                 </div>
 
                 <Button type="submit" className="w-full" disabled={loading}>
