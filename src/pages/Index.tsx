@@ -33,6 +33,8 @@ const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
+  const [showLanguageSelector, setShowLanguageSelector] = useState(false);
+  const [pendingVideoId, setPendingVideoId] = useState<string>('');
   const { toast } = useToast();
 
   // Auth state management
@@ -431,6 +433,50 @@ const Index = () => {
     }
   };
 
+  const continueProcessing = async (videoId: string, languageCode?: string) => {
+    setIsProcessing(true);
+    setProcessingStep('Extracting transcript...');
+    setShowLanguageSelector(false);
+
+    try {
+      const { transcript, videoTitle } = await fetchTranscript(videoId, languageCode);
+      
+      setProcessingStep('Analyzing content with AI...');
+      const { vocabulary, grammar } = await analyzeContentWithAI(transcript);
+      
+      setProcessingStep('Generating practice sentences...');
+      const practiceSentences = await generatePracticeSentences(vocabulary, grammar, selectedLanguage);
+      
+      const project = {
+        id: Date.now(),
+        title: videoTitle || `Video Lesson - ${videoId}`,
+        url: youtubeUrl,
+        script: transcript,
+        vocabulary,
+        grammar,
+        detectedLanguage: selectedLanguage,
+        practiceSentences
+      };
+      
+      setCurrentProject(project);
+      setActiveTab('lesson');
+      
+      toast({
+        title: "Video processed successfully!",
+        description: `Your lesson is ready for study. Language: ${selectedLanguage}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Processing failed",
+        description: error.message || "Failed to process video",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+      setProcessingStep('');
+    }
+  };
+
   const handleUrlSubmit = async () => {
     if (!youtubeUrl) {
       toast({
@@ -450,45 +496,45 @@ const Index = () => {
       return;
     }
 
-    // Process video immediately without language selection
+    // Show language selector immediately
+    setPendingVideoId(videoId);
+    setShowLanguageSelector(true);
+    setSelectedLanguage('');
+  };
+
+  const handleLanguageSelected = async () => {
+    if (!pendingVideoId || !selectedLanguage) return;
+    
+    setShowLanguageSelector(false);
     setIsProcessing(true);
     setProcessingStep('Extracting transcript...');
     
     try {
-      // Get transcript without specifying language (auto-detect)
-      const { transcript, videoTitle } = await fetchTranscript(videoId);
-      
-      setProcessingStep('Analyzing content with AI...');
-      const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(transcript);
-      
-      setProcessingStep('Generating practice sentences...');
-      const practiceSentences = await generatePracticeSentences(vocabulary, grammar, detectedLanguage);
-      
-      const project = {
-        id: Date.now(),
-        title: videoTitle || `Video Lesson - ${videoId}`,
-        url: youtubeUrl,
-        script: transcript,
-        vocabulary,
-        grammar,
-        detectedLanguage,
-        practiceSentences
+      // Map the language name to language code for transcript extraction
+      const languageCodeMap: { [key: string]: string } = {
+        'Japanese': 'ja',
+        'Chinese': 'zh',
+        'Korean': 'ko',
+        'Spanish': 'es',
+        'French': 'fr',
+        'German': 'de',
+        'Italian': 'it',
+        'Portuguese': 'pt',
+        'Russian': 'ru',
+        'Arabic': 'ar',
+        'Hindi': 'hi',
       };
       
-      setCurrentProject(project);
-      setActiveTab('lesson');
+      const languageCode = languageCodeMap[selectedLanguage];
+      await continueProcessing(pendingVideoId, languageCode);
       
-      toast({
-        title: "Video processed successfully!",
-        description: `Your lesson is ready for study. Language: ${detectedLanguage}`,
-      });
     } catch (error: any) {
+      console.error('Processing error:', error);
       toast({
         title: "Processing failed",
-        description: error.message || "Failed to process video",
+        description: error.message || "Could not process the video",
         variant: "destructive",
       });
-    } finally {
       setIsProcessing(false);
       setProcessingStep('');
     }
@@ -619,7 +665,65 @@ const Index = () => {
               </CardContent>
             </Card>
 
-            {youtubeUrl && !isProcessing && (
+            {/* Language Selection Dialog */}
+            {showLanguageSelector && (
+              <Card className="border-primary">
+                <CardHeader>
+                  <CardTitle>Select Language</CardTitle>
+                  <CardDescription>
+                    Choose the language you want to learn from this video
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <Select
+                      value={selectedLanguage}
+                      onValueChange={setSelectedLanguage}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a language" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Japanese">Japanese</SelectItem>
+                        <SelectItem value="Chinese">Chinese (Mandarin)</SelectItem>
+                        <SelectItem value="Korean">Korean</SelectItem>
+                        <SelectItem value="Spanish">Spanish</SelectItem>
+                        <SelectItem value="French">French</SelectItem>
+                        <SelectItem value="German">German</SelectItem>
+                        <SelectItem value="Italian">Italian</SelectItem>
+                        <SelectItem value="Portuguese">Portuguese</SelectItem>
+                        <SelectItem value="Russian">Russian</SelectItem>
+                        <SelectItem value="Arabic">Arabic</SelectItem>
+                        <SelectItem value="Hindi">Hindi</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleLanguageSelected}
+                        disabled={!selectedLanguage}
+                        className="flex-1"
+                      >
+                        Continue
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowLanguageSelector(false);
+                          setSelectedLanguage('');
+                          setPendingVideoId('');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {youtubeUrl && !showLanguageSelector && (
               <VideoPreview url={youtubeUrl} />
             )}
           </TabsContent>
