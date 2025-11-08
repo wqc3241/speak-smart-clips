@@ -138,6 +138,36 @@ const Index = () => {
     }
   };
 
+  const generatePracticeSentences = async (vocabulary: any[], grammar: any[], detectedLanguage: string) => {
+    try {
+      console.log('Generating practice sentences...');
+      
+      const { data, error } = await supabase.functions.invoke('generate-practice-sentences', {
+        body: {
+          vocabulary,
+          grammar,
+          detectedLanguage,
+          count: 10
+        }
+      });
+
+      if (error) {
+        console.error('Error generating sentences:', error);
+        return [];
+      }
+
+      if (data?.sentences && data.sentences.length > 0) {
+        console.log('Generated practice sentences:', data.sentences.length);
+        return data.sentences;
+      }
+      
+      return [];
+    } catch (error: any) {
+      console.error('Failed to generate sentences:', error);
+      return [];
+    }
+  };
+
   const saveCurrentProject = () => {
     if (!currentProject) return;
     try {
@@ -225,6 +255,9 @@ const Index = () => {
       console.log('Analyzing test content with AI...');
       const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(transcript);
       
+      // Generate practice sentences automatically
+      const practiceSentences = await generatePracticeSentences(vocabulary, grammar, detectedLanguage);
+      
       const project = {
         id: Date.now(),
         title: TEST_VIDEO_TITLE,
@@ -232,7 +265,8 @@ const Index = () => {
         script: transcript,
         vocabulary: vocabulary,
         grammar: grammar,
-        detectedLanguage: detectedLanguage
+        detectedLanguage: detectedLanguage,
+        practiceSentences: practiceSentences
       };
       
       setCurrentProject(project);
@@ -284,6 +318,9 @@ const Index = () => {
       console.log('Analyzing content with AI...');
       const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(transcript);
       
+      // Generate practice sentences automatically
+      const practiceSentences = await generatePracticeSentences(vocabulary, grammar, detectedLanguage);
+      
       const project = {
         id: Date.now(),
         title: videoTitle || `Video Lesson - ${videoId}`,
@@ -291,7 +328,8 @@ const Index = () => {
         script: transcript,
         vocabulary: vocabulary,
         grammar: grammar,
-        detectedLanguage: detectedLanguage
+        detectedLanguage: detectedLanguage,
+        practiceSentences: practiceSentences
       };
       
       setCurrentProject(project);
@@ -445,7 +483,12 @@ const Index = () => {
 
           <TabsContent value="conversation" className="space-y-6">
             {currentProject ? (
-              <PracticeInterface project={currentProject} />
+              <PracticeInterface 
+                project={currentProject} 
+                onSentencesUpdate={(sentences) => {
+                  setCurrentProject(prev => prev ? {...prev, practiceSentences: sentences} : null);
+                }}
+              />
             ) : (
               <Card className="text-center py-12">
                 <CardContent>

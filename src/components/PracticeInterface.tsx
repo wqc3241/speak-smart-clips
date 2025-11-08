@@ -19,10 +19,11 @@ interface PracticeSentence {
 
 interface PracticeInterfaceProps {
   project: any;
+  onSentencesUpdate?: (sentences: PracticeSentence[]) => void;
 }
 
-export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project }) => {
-  const [practiceSentences, setPracticeSentences] = useState<PracticeSentence[]>([]);
+export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, onSentencesUpdate }) => {
+  const [practiceSentences, setPracticeSentences] = useState<PracticeSentence[]>(project.practiceSentences || []);
   const [isLoading, setIsLoading] = useState(false);
   const [currentSpeaking, setCurrentSpeaking] = useState<string | null>(null);
   const [difficultyFilter, setDifficultyFilter] = useState<'all' | 'beginner' | 'intermediate' | 'advanced'>('all');
@@ -96,6 +97,7 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project })
 
       if (data?.sentences && data.sentences.length > 0) {
         setPracticeSentences(data.sentences);
+        onSentencesUpdate?.(data.sentences); // Update parent state
         toast({
           title: "Practice sentences generated!",
           description: `Created ${data.sentences.length} sentences for practice.`,
@@ -119,10 +121,9 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project })
     }
   };
 
+  // Update sentences when project changes
   useEffect(() => {
-    if (project && project.vocabulary?.length > 0 && project.grammar?.length > 0) {
-      generateSentences();
-    }
+    setPracticeSentences(project.practiceSentences || []);
   }, [project]);
 
   const getDifficultyColor = (difficulty: string) => {
