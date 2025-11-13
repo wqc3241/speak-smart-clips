@@ -69,11 +69,12 @@ serve(async (req) => {
   }
 
   try {
-    const { videoId } = await req.json();
+    // Validate input
+    const requestSchema = z.object({
+      videoId: z.string().regex(/^[a-zA-Z0-9_-]{11}$/, 'Invalid YouTube video ID format')
+    });
     
-    if (!videoId) {
-      throw new Error('Video ID is required');
-    }
+    const { videoId } = requestSchema.parse(await req.json());
 
     console.log('=== Fetching available languages for video:', videoId);
     

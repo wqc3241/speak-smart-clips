@@ -35,24 +35,31 @@ serve(async (req) => {
   }
 
   try {
-    const { vocabulary, grammar, detectedLanguage, count = 10 } = await req.json();
+    // Validate input
+    const vocabularySchema = z.object({
+      word: z.string().max(100),
+      definition: z.string().max(500),
+      difficulty: z.string().optional()
+    });
+
+    const grammarSchema = z.object({
+      rule: z.string().max(200),
+      example: z.string().max(500),
+      explanation: z.string().max(1000)
+    });
+
+    const requestSchema = z.object({
+      vocabulary: z.array(vocabularySchema).min(1, 'At least one vocabulary item required').max(100, 'Maximum 100 vocabulary items'),
+      grammar: z.array(grammarSchema).min(1, 'At least one grammar item required').max(50, 'Maximum 50 grammar items'),
+      detectedLanguage: z.string().max(50),
+      count: z.number().int().min(1).max(20).default(10)
+    });
+
+    const { vocabulary, grammar, detectedLanguage, count } = requestSchema.parse(await req.json());
 
     console.log('Generating practice sentences for:', detectedLanguage);
-    console.log('Vocabulary count:', vocabulary?.length);
-    console.log('Grammar count:', grammar?.length);
-
-    if (!vocabulary || !grammar || vocabulary.length === 0 || grammar.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'Missing vocabulary or grammar data',
-          sentences: []
-        }), 
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
+    console.log('Vocabulary count:', vocabulary.length);
+    console.log('Grammar count:', grammar.length);
 
     const vocabularyWords = vocabulary.map((v: VocabularyItem) => v.word).join(', ');
     const grammarRules = grammar.map((g: GrammarItem) => g.rule).join('; ');
