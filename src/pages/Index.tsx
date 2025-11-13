@@ -35,34 +35,60 @@ const Index = () => {
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
   const [pendingVideoId, setPendingVideoId] = useState<string>('');
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const { toast } = useToast();
 
   // Auth state management
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+    let mounted = true;
+
+    const checkAuth = async () => {
+      try {
+        // Check for existing session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
+        
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Redirect to auth if not logged in
         if (!session) {
+          // Not logged in - redirect immediately
+          window.location.href = '/auth';
+          return;
+        }
+        
+        // Logged in - show content
+        setIsCheckingAuth(false);
+      } catch (error) {
+        console.error('Auth check error:', error);
+        if (mounted) {
+          setIsCheckingAuth(false);
+          window.location.href = '/auth';
+        }
+      }
+    };
+
+    // Set up auth state listener for future changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!mounted) return;
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (!session && !isCheckingAuth) {
           window.location.href = '/auth';
         }
       }
     );
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (!session) {
-        window.location.href = '/auth';
-      }
-    });
+    checkAuth();
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -539,6 +565,18 @@ const Index = () => {
       setProcessingStep('');
     }
   };
+
+  // Show loading state while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin mx-auto text-primary" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-8">
