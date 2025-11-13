@@ -30,11 +30,12 @@ serve(async (req) => {
   }
 
   try {
-    const { transcript } = await req.json();
+    // Validate input
+    const requestSchema = z.object({
+      transcript: z.string().min(50, 'Transcript too short').max(50000, 'Transcript too long (max 50,000 characters)')
+    });
     
-    if (!transcript || transcript.trim().length === 0) {
-      throw new Error('Transcript is required');
-    }
+    const { transcript } = requestSchema.parse(await req.json());
 
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openAIApiKey) {

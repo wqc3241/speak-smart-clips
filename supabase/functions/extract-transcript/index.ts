@@ -1,5 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { CORS_HEADERS, TranscriptResult } from './types.ts';
 
 async function extractWithSupadata(videoId: string, languageCode?: string): Promise<string | null> {
@@ -110,11 +111,13 @@ serve(async (req) => {
   }
 
   try {
-    const { videoId, languageCode } = await req.json();
-
-    if (!videoId) {
-      throw new Error('Video ID is required');
-    }
+    // Validate input
+    const requestSchema = z.object({
+      videoId: z.string().regex(/^[a-zA-Z0-9_-]{11}$/, 'Invalid YouTube video ID format'),
+      languageCode: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/, 'Invalid language code format').optional()
+    });
+    
+    const { videoId, languageCode } = requestSchema.parse(await req.json());
 
     console.log('=== Extracting transcript for video ID:', videoId, 'language:', languageCode || 'auto');
 
