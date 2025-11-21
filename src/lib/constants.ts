@@ -2,3 +2,5 @@ export const TEST_TRANSCRIPT = `おはようございます。え、ウィンザ
 
 export const TEST_VIDEO_TITLE = "Tennis Racket Review - Babolat Touch Tonic Natural String";
 export const TEST_VIDEO_URL = "https://www.youtube.com/watch?v=test_sample_123";
+
+export const AVATAR_URL = 'https://evmamwdmwogmlezndueg.supabase.co/storage/v1/object/public/App_Image/orange_fox.png';
