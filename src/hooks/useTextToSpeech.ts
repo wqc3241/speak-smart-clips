@@ -33,9 +33,8 @@ export const useTextToSpeech = () => {
                 throw new Error('Not authenticated');
             }
 
-            // Get the Supabase URL from the client
-            const supabaseUrl = supabase.supabaseUrl;
-            const functionUrl = `${supabaseUrl}/functions/v1/generate-speech`;
+            // Get the Supabase URL from environment
+            const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-speech`;
 
             const response = await fetch(functionUrl, {
                 method: 'POST',
