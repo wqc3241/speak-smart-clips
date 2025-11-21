@@ -227,8 +227,29 @@ serve(async (req) => {
   }
 
   try {
-    const { videoUrl, videoId: rawId } = await req.json();
-    const videoId = extractVideoId(videoUrl || rawId);
+    // Validate input
+    const requestSchema = z.object({
+      videoUrl: z.string().optional(),
+      videoId: z.string().optional(),
+    }).refine(data => data.videoUrl || data.videoId, {
+      message: 'Either videoUrl or videoId must be provided'
+    });
+
+    const body = await req.json();
+    const validation = requestSchema.safeParse(body);
+
+    if (!validation.success) {
+      return new Response(
+        JSON.stringify({ success: false, error: validation.error.issues[0].message }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const { videoUrl, videoId: rawId } = validation.data;
+    const videoId = extractVideoId(videoUrl || rawId || '');
     if (!videoId) {
       return new Response(
         JSON.stringify({ success: false, error: "Missing or invalid video URL/ID" }),
@@ -253,8 +274,22 @@ serve(async (req) => {
     const bytes = await downloadAudio(audio.url);
     const blob = uint8ToBlob(bytes, audio.mime || "audio/mp4");
 
+    // Map mime type to correct file extension for Whisper API
+    let fileExtension = "m4a"; // Default to m4a for audio/mp4
+    if (audio.mime?.includes("webm")) {
+      fileExtension = "webm";
+    } else if (audio.mime?.includes("mpeg") || audio.mime?.includes("mp3")) {
+      fileExtension = "mp3";
+    } else if (audio.mime?.includes("wav")) {
+      fileExtension = "wav";
+    } else if (audio.mime?.includes("ogg")) {
+      fileExtension = "ogg";
+    } else if (audio.mime?.includes("flac")) {
+      fileExtension = "flac";
+    }
+
     const form = new FormData();
-    form.append("file", blob, `audio.${audio.mime?.includes("webm") ? "webm" : "mp4"}`);
+    form.append("file", blob, `audio.${fileExtension}`);
     form.append("model", "whisper-1");
 
     const openAIApiKey = Deno.env.get("OPENAI_API_KEY");
