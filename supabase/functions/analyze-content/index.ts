@@ -35,98 +35,105 @@ serve(async (req) => {
     const requestSchema = z.object({
       transcript: z.string().min(50, 'Transcript too short').max(50000, 'Transcript too long (max 50,000 characters)')
     });
-    
+
     const { transcript } = requestSchema.parse(await req.json());
 
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openAIApiKey) {
-      throw new Error('OPENAI_API_KEY is not configured');
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiApiKey) {
+      throw new Error('GEMINI_API_KEY is not configured');
     }
 
-    console.log('Analyzing content with AI, transcript length:', transcript.length);
+    console.log('Analyzing content with Gemini 3 Pro, transcript length:', transcript.length);
 
-    // Use OpenAI to analyze the content in any language
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Define the schema for structured output
+    const responseSchema = {
+      type: "object",
+      properties: {
+        detectedLanguage: { type: "string", description: "The detected language of the text (e.g., Japanese, Chinese, Korean)." },
+        vocabulary: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              word: { type: "string", description: "The vocabulary word in the original language." },
+              definition: { type: "string", description: "Clear definition in English." },
+              difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"], description: "Difficulty level." }
+            },
+            required: ["word", "definition", "difficulty"]
+          }
+        },
+        grammar: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              rule: { type: "string", description: "Grammar rule name in the original language." },
+              example: { type: "string", description: "Example from the text in the original language." },
+              explanation: { type: "string", description: "Clear explanation in English." }
+            },
+            required: ["rule", "example", "explanation"]
+          }
+        }
+      },
+      required: ["detectedLanguage", "vocabulary", "grammar"]
+    };
+
+    // Use Gemini 3 Pro to analyze the content
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=' + geminiApiKey, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a language learning assistant. Analyze the provided text and extract:
-1. ALL key vocabulary words with definitions and difficulty levels (beginner/intermediate/advanced) - extract every important word that a learner should know from the text
-2. ALL important grammar patterns with examples from the text and explanations - extract every significant grammar structure used in the text
-3. The language of the text
+        contents: [{
+          parts: [{
+            text: `You are a language learning assistant. Analyze the provided text sentence by sentence to extract key vocabulary and grammar patterns.
 
-CRITICAL - LANGUAGE DETECTION RULES:
-- **Japanese**: Contains hiragana (あいうえお), katakana (アイウエオ), particles (は、を、に、が、の、へ、と、で、から、まで), verb endings like ます/です/た/て
-- **Chinese (Mandarin)**: Only uses hanzi characters (汉字/漢字), no hiragana/katakana, uses 的、了、吗、呢、啊 particles
-- **Korean**: Uses Hangul (한글) characters
-- Check for language-specific particles and writing systems FIRST before making a determination
-- If text contains hiragana or katakana characters, it is ALWAYS Japanese, even if it also has kanji
-- If text only has hanzi with no hiragana/katakana, it is Chinese
-- Look for Japanese verb conjugations (ている、ました、でした) vs Chinese aspect markers (了、过、着)
+CRITICAL INSTRUCTIONS:
+1. **Sentence-by-Sentence Analysis**: Go through the text sentence by sentence. For each sentence, identify important vocabulary and grammar structures.
+2. **Deduplication**: Consolidate your findings. Ensure there are NO duplicate vocabulary words or grammar rules in the final output. If a word or rule appears multiple times, keep only the most representative instance.
+3. **Language Detection**: Accurately detect the language (Japanese, Chinese, Korean, etc.) based on characters and particles.
+4. **Output Format**: You must return the result in the specified JSON format.
 
-IMPORTANT: Provide all definitions and explanations in ENGLISH (the learner's native language), but keep vocabulary words, grammar rule names, and grammar examples in the ORIGINAL LANGUAGE of the text.
-
-Return ONLY valid JSON in this exact format:
-{
-  "detectedLanguage": "language name (Japanese, Chinese, Korean, Spanish, etc.)",
-  "vocabulary": [
-    {
-      "word": "word in the original language",
-      "definition": "clear definition in English",
-      "difficulty": "beginner|intermediate|advanced"
-    }
-  ],
-  "grammar": [
-    {
-      "rule": "grammar rule name in the original language",
-      "example": "example from the text in the original language",
-      "explanation": "clear, detailed explanation in English that helps English speakers understand how this grammar pattern works"
-    }
-  ]
-}`
-          },
-          {
-            role: 'user',
-            content: `Analyze this text:\n\n${transcript.slice(0, 3000)}`
-          }
-        ],
-        temperature: 0.3,
-        max_tokens: 4000,
+Analyze this text:
+${transcript.slice(0, 10000)}` // Increased limit for Gemini's larger context window
+          }]
+        }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseJsonSchema: responseSchema,
+          temperature: 1.0 // Recommended for Gemini 3
+        }
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI API error:', response.status, errorText);
-      throw new Error(`OpenAI API error: ${response.status}`);
+      console.error('Gemini API error:', response.status, errorText);
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
 
-    if (!content) {
-      throw new Error('No response from OpenAI');
+    // Parse Gemini response
+    // Gemini 3 with structured output returns the JSON string in the text field
+    const contentText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!contentText) {
+      throw new Error('No response content from Gemini');
     }
 
-    console.log('AI response received, parsing...');
+    console.log('Gemini response received, parsing...');
 
-    // Parse the JSON response
     let result: AnalysisResult;
     try {
-      result = JSON.parse(content);
+      result = JSON.parse(contentText);
     } catch (parseError) {
-      console.error('Failed to parse AI response:', content);
-      throw new Error('Failed to parse AI response');
+      console.error('Failed to parse Gemini response:', contentText);
+      throw new Error('Failed to parse Gemini response');
     }
 
-    // Validate and sanitize the result
+    // Validate and sanitize the result (extra safety)
     if (!result.vocabulary || !Array.isArray(result.vocabulary)) {
       result.vocabulary = [];
     }

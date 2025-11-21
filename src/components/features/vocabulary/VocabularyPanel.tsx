@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Book, GraduationCap, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+import { useTextToSpeech } from "@/hooks/useTextToSpeech";
+import { Loader2 } from "lucide-react";
+
 interface VocabularyItem {
   word: string;
   definition: string;
@@ -24,56 +27,18 @@ interface VocabularyPanelProps {
   detectedLanguage?: string;
 }
 
-export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({ 
-  vocabulary, 
-  grammar, 
-  detectedLanguage 
+export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
+  vocabulary,
+  grammar,
+  detectedLanguage
 }) => {
-  const [speakingWord, setSpeakingWord] = useState<string | null>(null);
-  const { toast } = useToast();
+  const { speak, isPlaying } = useTextToSpeech();
+  const [currentText, setCurrentText] = useState<string | null>(null);
 
-  const getLanguageCode = (language?: string): string => {
-    const languageMap: Record<string, string> = {
-      "japanese": "ja-JP",
-      "english": "en-US",
-      "spanish": "es-ES",
-      "french": "fr-FR",
-      "chinese": "zh-CN",
-      "korean": "ko-KR",
-      "german": "de-DE",
-      "italian": "it-IT",
-      "portuguese": "pt-PT",
-    };
-    return languageMap[language?.toLowerCase() || ""] || "en-US";
-  };
-
-  const speak = (text: string) => {
-    if (!('speechSynthesis' in window)) {
-      toast({
-        title: "Not Supported",
-        description: "Text-to-speech is not supported in your browser.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    setSpeakingWord(text);
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = getLanguageCode(detectedLanguage);
-    utterance.rate = 0.8;
-    
-    utterance.onend = () => setSpeakingWord(null);
-    utterance.onerror = () => {
-      setSpeakingWord(null);
-      toast({
-        title: "Pronunciation Error",
-        description: "Could not pronounce this text.",
-        variant: "destructive",
-      });
-    };
-
-    window.speechSynthesis.speak(utterance);
+  const handleSpeak = async (text: string) => {
+    setCurrentText(text);
+    await speak(text);
+    setCurrentText(null);
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -106,12 +71,14 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 shrink-0"
-                      onClick={() => speak(item.word)}
-                      disabled={speakingWord === item.word}
+                      onClick={() => handleSpeak(item.word)}
+                      disabled={isPlaying && currentText === item.word}
                     >
-                      <Volume2 className={`h-3.5 w-3.5 ${
-                        speakingWord === item.word ? 'text-primary' : 'text-muted-foreground'
-                      }`} />
+                      {isPlaying && currentText === item.word ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                      ) : (
+                        <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
                     </Button>
                     <Badge className={getDifficultyColor(item.difficulty)} variant="outline">
                       {item.difficulty}
@@ -145,12 +112,14 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                       variant="ghost"
                       size="icon"
                       className="h-5 w-5 shrink-0"
-                      onClick={() => speak(item.example)}
-                      disabled={speakingWord === item.example}
+                      onClick={() => handleSpeak(item.example)}
+                      disabled={isPlaying && currentText === item.example}
                     >
-                      <Volume2 className={`h-3 w-3 ${
-                        speakingWord === item.example ? 'text-primary' : 'text-muted-foreground'
-                      }`} />
+                      {isPlaying && currentText === item.example ? (
+                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                      ) : (
+                        <Volume2 className="h-3 w-3 text-muted-foreground" />
+                      )}
                     </Button>
                   </div>
                   <p className="text-xs text-foreground">{item.explanation}</p>

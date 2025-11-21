@@ -117,7 +117,10 @@ export const StudyTab: React.FC<StudyTabProps> = ({
             {/* Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                 <div className="space-y-4">
-                    <ScriptDisplay script={currentProject.script} />
+                    <ScriptDisplay
+                        script={currentProject.script}
+                        language={currentProject.detectedLanguage}
+                    />
                     <Button className="w-full hidden md:flex" variant="outline" onClick={onSaveProject}>
                         <Save className="w-4 h-4 mr-2" />
                         Save Project
