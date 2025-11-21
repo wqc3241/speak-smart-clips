@@ -84,7 +84,7 @@ const Auth = () => {
       <Card className="w-full max-w-md">
         <div className="flex justify-center pt-6">
           <img
-            src="/orange_fox.png"
+            src="/avatar.png"
             alt="App Mascot"
             className="w-32 h-32 object-contain hover:scale-110 transition-transform duration-300"
           />
