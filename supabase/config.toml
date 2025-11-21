@@ -4,6 +4,8 @@ project_id = "evmamwdmwogmlezndueg"
 
 [functions.extract-transcript]
 
+[functions.poll-transcript-job]
+
 [functions.analyze-content]
 
 [functions.generate-practice-sentences]

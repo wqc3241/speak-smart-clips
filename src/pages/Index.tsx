@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Youtube, BookOpen, MessageCircle, History, Loader2 } from 'lucide-react';
@@ -24,10 +24,18 @@ const Index = () => {
     processVideo,
     regenerateAnalysis,
     analyzeContentWithAI,
-    generatePracticeSentences
+    generatePracticeSentences,
+    cleanup
   } = useVideoProcessing();
-  const { currentProject, setCurrentProject, saveProject } = useProject(user);
+  const { currentProject, setCurrentProject, autoSaveProject } = useProject(user);
   const { toast } = useToast();
+
+  // Cleanup polling intervals on unmount
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, [cleanup]);
 
   const handleProjectCreated = (project: any) => {
     setCurrentProject(project);
@@ -92,9 +100,16 @@ const Index = () => {
   };
 
   const handleProcessVideo = async (videoId: string, languageCode?: string, selectedLanguageName?: string) => {
-    const project = await processVideo(videoId, languageCode, selectedLanguageName);
+    const project = await processVideo(videoId, languageCode, selectedLanguageName, user?.id, (updatedProject) => {
+      // This callback is called when a pending project completes
+      if (currentProject?.jobId === updatedProject.jobId) {
+        setCurrentProject(updatedProject);
+      }
+    });
     if (project) {
       handleProjectCreated(project);
+      // Auto-save immediately (works for both completed and pending projects)
+      await autoSaveProject(project);
     }
   };
 
@@ -166,7 +181,6 @@ const Index = () => {
               currentProject={currentProject}
               isProcessing={isProcessing}
               processingStep={processingStep}
-              onSaveProject={() => saveProject(currentProject)}
               onUpdateProject={setCurrentProject}
               onRegenerateAnalysis={handleRegenerateAnalysis}
             />

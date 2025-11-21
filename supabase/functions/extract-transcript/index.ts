@@ -82,8 +82,9 @@ async function extractWithSupadata(videoId: string, languageCode?: string): Prom
       throw new Error('No job ID returned from API');
     }
     
-    // Poll for job completion
-    return await pollJobStatus(jobData.jobId, supadataApiKey);
+    // Return immediately with pending status and jobId
+    // Polling will be handled by the frontend calling poll-transcript-job
+    throw new Error(`PENDING:${jobData.jobId}`);
   }
 
   // Handle immediate errors
@@ -217,6 +218,18 @@ serve(async (req) => {
       errorMessage = 'Transcript generation is taking longer than expected.';
       suggestion = 'This video requires AI transcript generation which is still processing. Please wait 3-5 minutes and try again.';
       statusCode = 202;
+    } else if (errorObj.message.startsWith('PENDING:')) {
+      // Extract jobId from error message
+      const jobId = errorObj.message.substring(8);
+      return new Response(JSON.stringify({
+        success: true,
+        status: 'pending',
+        jobId: jobId,
+        message: 'Transcript generation started'
+      }), {
+        status: 202,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
     
     const result: TranscriptResult = {
