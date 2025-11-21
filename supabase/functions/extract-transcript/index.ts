@@ -4,8 +4,8 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { CORS_HEADERS, TranscriptResult } from './types.ts';
 
 async function pollJobStatus(jobId: string, supadataApiKey: string): Promise<string> {
-  const maxPollingAttempts = 30; // 30 attempts * 2 seconds = 60 seconds max
-  const pollingInterval = 2000; // 2 seconds between checks
+  const maxPollingAttempts = 24; // 24 attempts * 5 seconds = 120 seconds max
+  const pollingInterval = 5000; // 5 seconds between checks to avoid rate limiting
   
   console.log(`=== SUPADATA: Polling job status for jobId: ${jobId}`);
   
@@ -37,7 +37,7 @@ async function pollJobStatus(jobId: string, supadataApiKey: string): Promise<str
     }
   }
   
-  throw new Error('Transcript generation timed out after 60 seconds. Please try again in a minute.');
+  throw new Error('Transcript generation timed out after 2 minutes. This video may require more processing time. Please try again in a few minutes.');
 }
 
 async function extractWithSupadata(videoId: string, languageCode?: string): Promise<string | null> {
