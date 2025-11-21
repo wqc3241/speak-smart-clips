@@ -28,7 +28,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message
+        error: (error as Error).message
       }),
       {
         status: 500,
@@ -87,7 +87,7 @@ async function testYouTubeAPI() {
       JSON.stringify({
         success: false,
         service: 'youtube',
-        error: `YouTube API test failed: ${error.message}`
+        error: `YouTube API test failed: ${(error as Error).message}`
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -157,7 +157,7 @@ async function testOpenAIAPI() {
       JSON.stringify({
         success: false,
         service: 'openai',
-        error: `OpenAI API test failed: ${error.message}`
+        error: `OpenAI API test failed: ${(error as Error).message}`
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

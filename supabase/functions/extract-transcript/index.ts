@@ -193,26 +193,27 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in extract-transcript function:', error);
     
+    const errorObj = error as Error;
     // Determine user-friendly error message and suggestion
-    let errorMessage = error.message || 'Failed to extract transcript';
+    let errorMessage = errorObj.message || 'Failed to extract transcript';
     let suggestion = 'Please check that the video URL is valid and try again.';
     let statusCode = 500;
     
-    if (error.message.includes('Rate limit') || error.message.includes('429')) {
+    if (errorObj.message.includes('Rate limit') || errorObj.message.includes('429')) {
       errorMessage = 'Rate limit exceeded. Please try again in a few minutes.';
       suggestion = 'The transcript service is temporarily rate limited. Wait a few minutes and try again.';
       statusCode = 429;
-    } else if (error.message.includes('API key') || error.message.includes('authentication')) {
+    } else if (errorObj.message.includes('API key') || errorObj.message.includes('authentication')) {
       errorMessage = 'API configuration error';
       suggestion = 'Please contact support - the transcript service is not properly configured.';
-    } else if (error.message.includes('captions') || error.message.includes('cannot be accessed')) {
+    } else if (errorObj.message.includes('captions') || errorObj.message.includes('cannot be accessed')) {
       errorMessage = 'This video does not have captions available.';
       suggestion = 'Please try a different video that has captions or subtitles enabled.';
-    } else if (error.message.includes('Transcript generation failed')) {
+    } else if (errorObj.message.includes('Transcript generation failed')) {
       errorMessage = 'Unable to extract transcript from this video.';
       suggestion = 'This video may not have accessible captions, or the transcript service encountered an issue. Please try a different video or try again later.';
       statusCode = 400;
-    } else if (error.message.includes('timed out')) {
+    } else if (errorObj.message.includes('timed out')) {
       errorMessage = 'Transcript generation is taking longer than expected.';
       suggestion = 'This video requires AI transcript generation which is still processing. Please wait 3-5 minutes and try again.';
       statusCode = 202;

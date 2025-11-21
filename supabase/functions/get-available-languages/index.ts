@@ -130,7 +130,7 @@ serve(async (req) => {
     console.error('Error in get-available-languages:', error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message || 'Failed to fetch available languages'
+      error: (error as Error).message || 'Failed to fetch available languages'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
