@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { supabase } from "@/integrations/supabase/client";
-import { YoutubeTranscript } from 'youtube-transcript';
 import { useToast } from "@/hooks/use-toast";
 
 export const useVideoProcessing = () => {
@@ -39,12 +38,12 @@ export const useVideoProcessing = () => {
             const { data, error } = await supabase.functions.invoke('extract-transcript', {
                 body: { videoId, languageCode }
             });
-            
+
             // Check for rate limit error specifically
             if (data?.error && data.error.includes('Rate limit exceeded')) {
                 throw new Error('RATE_LIMIT_EXCEEDED');
             }
-            
+
             if (!error && data?.success && data.transcript) {
                 console.log('✓ Successfully extracted transcript via extract-transcript');
                 return {
@@ -68,37 +67,7 @@ export const useVideoProcessing = () => {
             console.warn('extract-transcript edge function failed:', err);
         }
 
-        // 2) Last resort: Try client-side transcript (limited by CORS)
-        try {
-            console.log('Trying client-side youtube-transcript for:', videoId);
-            let segments: any[] | null = null;
-            try {
-                segments = await (YoutubeTranscript as any).fetchTranscript(videoId, { lang: 'en' });
-            } catch (e) {
-                // Fallback to any available language
-                segments = await (YoutubeTranscript as any).fetchTranscript(videoId);
-            }
-
-            if (segments && segments.length) {
-                const transcript = segments.map((s: any) => s.text).join(' ');
-                let videoTitle = `Video Lesson - ${videoId}`;
-                try {
-                    const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
-                    if (res.ok) {
-                        const meta = await res.json();
-                        if (meta.title) videoTitle = meta.title;
-                    }
-                } catch (e) {
-                    console.warn('Title fetch failed, using default.', e);
-                }
-                console.log('✓ Successfully extracted transcript via client-side youtube-transcript');
-                return { transcript, videoTitle, captionsAvailable: true };
-            }
-        } catch (err) {
-            console.warn('youtube-transcript failed:', err);
-        }
-
-        console.error('All transcript extraction methods failed for video:', videoId);
+        console.error('Transcript extraction failed for video:', videoId);
         throw new Error('Could not extract transcript. Please ensure the video has captions available and try again.');
     };
 
