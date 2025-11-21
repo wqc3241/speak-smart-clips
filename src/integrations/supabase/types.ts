@@ -45,13 +45,16 @@ export type Database = {
         Row: {
           created_at: string | null
           detected_language: string | null
+          error_message: string | null
           grammar: Json
           grammar_count: number | null
           id: string
           is_favorite: boolean | null
+          job_id: string | null
           last_accessed: string | null
           practice_sentences: Json
           script: string
+          status: string | null
           title: string
           updated_at: string | null
           user_id: string | null
@@ -62,13 +65,16 @@ export type Database = {
         Insert: {
           created_at?: string | null
           detected_language?: string | null
+          error_message?: string | null
           grammar?: Json
           grammar_count?: number | null
           id?: string
           is_favorite?: boolean | null
+          job_id?: string | null
           last_accessed?: string | null
           practice_sentences?: Json
           script: string
+          status?: string | null
           title: string
           updated_at?: string | null
           user_id?: string | null
@@ -79,13 +85,16 @@ export type Database = {
         Update: {
           created_at?: string | null
           detected_language?: string | null
+          error_message?: string | null
           grammar?: Json
           grammar_count?: number | null
           id?: string
           is_favorite?: boolean | null
+          job_id?: string | null
           last_accessed?: string | null
           practice_sentences?: Json
           script?: string
+          status?: string | null
           title?: string
           updated_at?: string | null
           user_id?: string | null

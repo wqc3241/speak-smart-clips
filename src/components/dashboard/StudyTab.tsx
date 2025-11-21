@@ -4,14 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScriptDisplay } from "@/components/features/video/ScriptDisplay";
 import { VocabularyPanel } from "@/components/features/vocabulary/VocabularyPanel";
-import { Save, BookOpen, Loader2 } from 'lucide-react';
+import { BookOpen, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
 interface StudyTabProps {
     currentProject: any;
     isProcessing: boolean;
     processingStep: string;
-    onSaveProject: () => void;
     onUpdateProject: (project: any) => void;
     onRegenerateAnalysis: () => Promise<void>;
 }
@@ -20,7 +19,6 @@ export const StudyTab: React.FC<StudyTabProps> = ({
     currentProject,
     isProcessing,
     processingStep,
-    onSaveProject,
     onUpdateProject,
     onRegenerateAnalysis
 }) => {
@@ -44,11 +42,32 @@ export const StudyTab: React.FC<StudyTabProps> = ({
 
     return (
         <div className="space-y-4">
-            {/* Save Button - Top on mobile */}
-            <Button className="w-full md:hidden" onClick={onSaveProject}>
-                <Save className="w-4 h-4 mr-2" />
-                Save Project
-            </Button>
+            {/* Status Indicators */}
+            {currentProject.status === 'pending' && (
+                <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+                    <CardContent className="p-4">
+                        <div className="flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin text-yellow-700 dark:text-yellow-300" />
+                            <span className="text-yellow-700 dark:text-yellow-300">
+                                AI transcript generation in progress...
+                            </span>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {currentProject.status === 'failed' && (
+                <Card className="border-red-500 bg-red-50 dark:bg-red-950">
+                    <CardContent className="p-4">
+                        <div className="flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-red-700 dark:text-red-300" />
+                            <span className="text-red-700 dark:text-red-300">
+                                Generation failed: {currentProject.errorMessage || 'Unknown error'}
+                            </span>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Language Selector */}
             {currentProject.detectedLanguage && (
@@ -114,24 +133,20 @@ export const StudyTab: React.FC<StudyTabProps> = ({
                 </Card>
             )}
 
-            {/* Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-                <div className="space-y-4">
+            {/* Content Grid - Only show if not pending */}
+            {currentProject.status !== 'pending' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                     <ScriptDisplay
                         script={currentProject.script}
                         language={currentProject.detectedLanguage}
                     />
-                    <Button className="w-full hidden md:flex" variant="outline" onClick={onSaveProject}>
-                        <Save className="w-4 h-4 mr-2" />
-                        Save Project
-                    </Button>
+                    <VocabularyPanel
+                        vocabulary={currentProject.vocabulary}
+                        grammar={currentProject.grammar}
+                        detectedLanguage={currentProject.detectedLanguage}
+                    />
                 </div>
-                <VocabularyPanel
-                    vocabulary={currentProject.vocabulary}
-                    grammar={currentProject.grammar}
-                    detectedLanguage={currentProject.detectedLanguage}
-                />
-            </div>
+            )}
         </div>
     );
 };
