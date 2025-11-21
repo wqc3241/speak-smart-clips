@@ -28,7 +28,10 @@ async function pollJobStatus(jobId: string, supadataApiKey: string): Promise<str
       console.log('=== SUPADATA: Job completed successfully');
       return data.content; // Return the transcript content
     } else if (data.status === 'failed') {
-      throw new Error(data.error || 'Transcript generation failed');
+      console.error('=== SUPADATA: Job failed with data:', JSON.stringify(data));
+      // Provide a more helpful error message
+      const errorDetail = data.error || data.message || 'Unknown error';
+      throw new Error(`Transcript generation failed: ${errorDetail}. This video may not have accessible captions or the service encountered an issue processing it.`);
     }
     // Status is 'queued' or 'active', continue polling
     
@@ -205,6 +208,10 @@ serve(async (req) => {
     } else if (error.message.includes('captions') || error.message.includes('cannot be accessed')) {
       errorMessage = 'This video does not have captions available.';
       suggestion = 'Please try a different video that has captions or subtitles enabled.';
+    } else if (error.message.includes('Transcript generation failed')) {
+      errorMessage = 'Unable to extract transcript from this video.';
+      suggestion = 'This video may not have accessible captions, or the transcript service encountered an issue. Please try a different video or try again later.';
+      statusCode = 400;
     } else if (error.message.includes('timed out')) {
       errorMessage = 'Transcript generation is taking longer than expected.';
       suggestion = 'This video requires AI transcript generation which is still processing. Please wait 3-5 minutes and try again.';
