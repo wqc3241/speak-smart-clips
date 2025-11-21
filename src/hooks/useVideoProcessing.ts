@@ -39,6 +39,12 @@ export const useVideoProcessing = () => {
             const { data, error } = await supabase.functions.invoke('extract-transcript', {
                 body: { videoId, languageCode }
             });
+            
+            // Check for rate limit error specifically
+            if (data?.error && data.error.includes('Rate limit exceeded')) {
+                throw new Error('RATE_LIMIT_EXCEEDED');
+            }
+            
             if (!error && data?.success && data.transcript) {
                 console.log('✓ Successfully extracted transcript via extract-transcript');
                 return {
@@ -55,6 +61,10 @@ export const useVideoProcessing = () => {
 
             console.warn('extract-transcript failed or returned no transcript:', data?.error);
         } catch (err) {
+            // Re-throw rate limit errors to be handled by processVideo
+            if (err instanceof Error && err.message === 'RATE_LIMIT_EXCEEDED') {
+                throw err;
+            }
             console.warn('extract-transcript edge function failed:', err);
         }
 
@@ -187,11 +197,20 @@ export const useVideoProcessing = () => {
 
             return project;
         } catch (error: any) {
-            toast({
-                title: "Processing failed",
-                description: error.message || "Failed to process video",
-                variant: "destructive",
-            });
+            // Check for rate limit error
+            if (error.message === 'RATE_LIMIT_EXCEEDED') {
+                toast({
+                    title: "Rate Limit Exceeded",
+                    description: "The transcript service is temporarily rate limited. Please wait a few minutes and try again.",
+                    variant: "destructive",
+                });
+            } else {
+                toast({
+                    title: "Processing failed",
+                    description: error.message || "Failed to process video",
+                    variant: "destructive",
+                });
+            }
             throw error;
         } finally {
             setIsProcessing(false);
