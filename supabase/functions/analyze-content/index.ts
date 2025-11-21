@@ -43,7 +43,7 @@ serve(async (req) => {
       throw new Error('GEMINI_API_KEY is not configured');
     }
 
-    console.log('Analyzing content with Gemini 2.0 Flash, transcript length:', transcript.length);
+    console.log('Analyzing content with Gemini 3 Pro, transcript length:', transcript.length);
 
     // Define the schema for structured output
     const responseSchema = {
@@ -78,8 +78,8 @@ serve(async (req) => {
       required: ["detectedLanguage", "vocabulary", "grammar"]
     };
 
-    // Use Gemini 2.0 Flash to analyze the content (faster and more reliable)
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' + geminiApiKey, {
+    // Use Gemini 3 Pro to analyze the content
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key=' + geminiApiKey, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -102,7 +102,7 @@ ${transcript.slice(0, 10000)}` // Increased limit for Gemini's larger context wi
         generationConfig: {
           responseMimeType: "application/json",
           responseJsonSchema: responseSchema,
-          temperature: 0.7 // Balanced for accuracy and creativity
+          temperature: 1.0 // Recommended for Gemini 3
         }
       }),
     });
