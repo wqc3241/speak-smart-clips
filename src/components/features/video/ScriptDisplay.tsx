@@ -14,7 +14,7 @@ interface ScriptDisplayProps {
 export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
   const [highlightedWords, setHighlightedWords] = useState<string[]>([]);
   const { toast } = useToast();
-  const { speak, isPlaying } = useTextToSpeech();
+  const { speak, isPlaying, currentText } = useTextToSpeech();
 
   const handleWordClick = (word: string) => {
     const cleanWord = word.replace(/[^\w]/g, '').toLowerCase();
@@ -56,8 +56,12 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
             Script
           </CardTitle>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={handleSpeak} disabled={isPlaying}>
-              {isPlaying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Volume2 className="w-4 h-4" />}
+            <Button variant="ghost" size="sm" onClick={handleSpeak}>
+              {isPlaying && currentText === script ? (
+                <Volume2 className="w-4 h-4 text-primary animate-pulse" />
+              ) : (
+                <Volume2 className="w-4 h-4" />
+              )}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setHighlightedWords([])}>
               <Highlighter className="w-4 h-4" />

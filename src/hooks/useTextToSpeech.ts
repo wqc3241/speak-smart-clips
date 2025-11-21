@@ -6,6 +6,7 @@ export const useTextToSpeech = () => {
     const [isPlaying, setIsPlaying] = useState(false);
     const { toast } = useToast();
     const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+    const [currentText, setCurrentText] = useState<string | null>(null);
 
     useEffect(() => {
         return () => {
@@ -18,13 +19,21 @@ export const useTextToSpeech = () => {
 
     const speak = async (text: string, voice: string = 'coral', instructions?: string) => {
         try {
-            if (isPlaying && currentAudio) {
+            // If clicking the same button that's playing, stop it
+            if (isPlaying && currentAudio && currentText === text) {
                 currentAudio.pause();
                 setIsPlaying(false);
+                setCurrentText(null);
                 return;
             }
 
+            // If different audio is playing, stop it first
+            if (isPlaying && currentAudio) {
+                currentAudio.pause();
+            }
+
             setIsPlaying(true);
+            setCurrentText(text);
 
             // Get the session for authentication
             const { data: { session } } = await supabase.auth.getSession();
@@ -60,12 +69,14 @@ export const useTextToSpeech = () => {
 
             audio.onended = () => {
                 setIsPlaying(false);
+                setCurrentText(null);
                 URL.revokeObjectURL(url);
             };
 
             audio.onerror = (e) => {
                 console.error('Audio playback error', e);
                 setIsPlaying(false);
+                setCurrentText(null);
                 toast({
                     title: "Playback Error",
                     description: "Failed to play the audio.",
@@ -84,8 +95,9 @@ export const useTextToSpeech = () => {
                 variant: "destructive",
             });
             setIsPlaying(false);
+            setCurrentText(null);
         }
     };
 
-    return { speak, isPlaying };
+    return { speak, isPlaying, currentText };
 };
