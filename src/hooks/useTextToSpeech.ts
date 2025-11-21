@@ -26,20 +26,33 @@ export const useTextToSpeech = () => {
 
             setIsPlaying(true);
 
-            const { data, error } = await supabase.functions.invoke('generate-speech', {
-                body: { text, voice },
-                responseType: 'blob',
+            // Get the session for authentication
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                throw new Error('Not authenticated');
+            }
+
+            // Get the Supabase URL from the client
+            const supabaseUrl = supabase.supabaseUrl;
+            const functionUrl = `${supabaseUrl}/functions/v1/generate-speech`;
+
+            const response = await fetch(functionUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({ text, voice }),
             });
 
-            if (error) {
-                throw new Error(error.message || 'Failed to generate speech');
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Failed to generate speech: ${errorText}`);
             }
 
-            if (!(data instanceof Blob)) {
-                throw new Error('Invalid response format');
-            }
-
-            const url = URL.createObjectURL(data);
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
             const audio = new Audio(url);
 
             audio.onended = () => {
