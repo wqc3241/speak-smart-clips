@@ -4,8 +4,8 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { CORS_HEADERS, TranscriptResult } from './types.ts';
 
 async function pollJobStatus(jobId: string, supadataApiKey: string): Promise<string> {
-  const maxPollingAttempts = 24; // 24 attempts * 5 seconds = 120 seconds max
-  const pollingInterval = 5000; // 5 seconds between checks to avoid rate limiting
+  const maxPollingAttempts = 24; // 24 attempts * 10 seconds = 240 seconds max
+  const pollingInterval = 10000; // 10 seconds between checks to avoid rate limiting
   
   console.log(`=== SUPADATA: Polling job status for jobId: ${jobId}`);
   
@@ -37,7 +37,7 @@ async function pollJobStatus(jobId: string, supadataApiKey: string): Promise<str
     }
   }
   
-  throw new Error('Transcript generation timed out after 2 minutes. This video may require more processing time. Please try again in a few minutes.');
+  throw new Error('Transcript generation timed out after 4 minutes. This video may require more processing time. Please try again in a few minutes.');
 }
 
 async function extractWithSupadata(videoId: string, languageCode?: string): Promise<string | null> {
@@ -51,7 +51,7 @@ async function extractWithSupadata(videoId: string, languageCode?: string): Prom
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
   // Build API URL with parameters
-  let apiUrl = `https://api.supadata.ai/v1/transcript?url=${encodeURIComponent(videoUrl)}&text=true`;
+  let apiUrl = `https://api.supadata.ai/v1/transcript?url=${encodeURIComponent(videoUrl)}&text=true&mode=auto`;
   
   if (languageCode) {
     apiUrl += `&lang=${languageCode}`;
@@ -207,7 +207,7 @@ serve(async (req) => {
       suggestion = 'Please try a different video that has captions or subtitles enabled.';
     } else if (error.message.includes('timed out')) {
       errorMessage = 'Transcript generation is taking longer than expected.';
-      suggestion = 'This video requires AI transcript generation which is still processing. Please wait 1-2 minutes and try again.';
+      suggestion = 'This video requires AI transcript generation which is still processing. Please wait 3-5 minutes and try again.';
       statusCode = 202;
     }
     
