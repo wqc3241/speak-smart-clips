@@ -16,7 +16,7 @@ export const useTextToSpeech = () => {
         };
     }, [currentAudio]);
 
-    const speak = async (text: string, voice: string = 'coral') => {
+    const speak = async (text: string, voice: string = 'coral', instructions?: string) => {
         try {
             if (isPlaying && currentAudio) {
                 currentAudio.pause();
@@ -42,7 +42,11 @@ export const useTextToSpeech = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`,
                 },
-                body: JSON.stringify({ text, voice }),
+                body: JSON.stringify({ 
+                    text, 
+                    voice,
+                    ...(instructions && { instructions })
+                }),
             });
 
             if (!response.ok) {
