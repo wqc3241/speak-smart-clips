@@ -2,36 +2,19 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Highlighter, Volume2 } from 'lucide-react';
+import { FileText, Highlighter, Volume2, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 
 interface ScriptDisplayProps {
   script: string;
   language?: string;
 }
 
-const getLanguageCode = (language: string): string => {
-  const map: Record<string, string> = {
-    'Japanese': 'ja-JP',
-    'Chinese': 'zh-CN',
-    'Chinese (Mandarin)': 'zh-CN',
-    'Korean': 'ko-KR',
-    'Spanish': 'es-ES',
-    'French': 'fr-FR',
-    'German': 'de-DE',
-    'Italian': 'it-IT',
-    'Portuguese': 'pt-PT',
-    'Russian': 'ru-RU',
-    'Arabic': 'ar-SA',
-    'Hindi': 'hi-IN',
-    'English': 'en-US',
-  };
-  return map[language] || 'en-US';
-};
-
-export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script, language = 'English' }) => {
+export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
   const [highlightedWords, setHighlightedWords] = useState<string[]>([]);
   const { toast } = useToast();
+  const { speak, isPlaying } = useTextToSpeech();
 
   const handleWordClick = (word: string) => {
     const cleanWord = word.replace(/[^\w]/g, '').toLowerCase();
@@ -42,21 +25,8 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script, language =
     }
   };
 
-  const speakScript = () => {
-    if (!('speechSynthesis' in window)) {
-      toast({
-        title: "Not Supported",
-        description: "Text-to-speech is not supported in your browser.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(script);
-    utterance.lang = getLanguageCode(language);
-    utterance.rate = 0.8;
-    window.speechSynthesis.speak(utterance);
+  const handleSpeak = () => {
+    speak(script);
   };
 
   const renderScript = () => {
@@ -86,8 +56,8 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script, language =
             Script
           </CardTitle>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={speakScript}>
-              <Volume2 className="w-4 h-4" />
+            <Button variant="ghost" size="sm" onClick={handleSpeak} disabled={isPlaying}>
+              {isPlaying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Volume2 className="w-4 h-4" />}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setHighlightedWords([])}>
               <Highlighter className="w-4 h-4" />
