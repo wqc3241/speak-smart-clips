@@ -7,9 +7,29 @@ import { useToast } from "@/hooks/use-toast";
 
 interface ScriptDisplayProps {
   script: string;
+  language?: string;
 }
 
-export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
+const getLanguageCode = (language: string): string => {
+  const map: Record<string, string> = {
+    'Japanese': 'ja-JP',
+    'Chinese': 'zh-CN',
+    'Chinese (Mandarin)': 'zh-CN',
+    'Korean': 'ko-KR',
+    'Spanish': 'es-ES',
+    'French': 'fr-FR',
+    'German': 'de-DE',
+    'Italian': 'it-IT',
+    'Portuguese': 'pt-PT',
+    'Russian': 'ru-RU',
+    'Arabic': 'ar-SA',
+    'Hindi': 'hi-IN',
+    'English': 'en-US',
+  };
+  return map[language] || 'en-US';
+};
+
+export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script, language = 'English' }) => {
   const [highlightedWords, setHighlightedWords] = useState<string[]>([]);
   const { toast } = useToast();
 
@@ -34,6 +54,7 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(script);
+    utterance.lang = getLanguageCode(language);
     utterance.rate = 0.8;
     window.speechSynthesis.speak(utterance);
   };
@@ -42,13 +63,12 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
     return script.split(' ').map((word, index) => {
       const cleanWord = word.replace(/[^\w]/g, '').toLowerCase();
       const isHighlighted = highlightedWords.includes(cleanWord);
-      
+
       return (
         <span
           key={index}
-          className={`cursor-pointer hover:bg-accent px-1 py-0.5 rounded transition-colors ${
-            isHighlighted ? 'bg-primary/20 font-medium' : ''
-          }`}
+          className={`cursor-pointer hover:bg-accent px-1 py-0.5 rounded transition-colors ${isHighlighted ? 'bg-primary/20 font-medium' : ''
+            }`}
           onClick={() => handleWordClick(word)}
         >
           {word}{' '}
