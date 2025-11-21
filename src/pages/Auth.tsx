@@ -82,13 +82,6 @@ const Auth = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
-        <div className="flex justify-center pt-6">
-          <img
-            src="/orange_fox.png"
-            alt="App Mascot"
-            className="w-32 h-32 object-contain hover:scale-110 transition-transform duration-300"
-          />
-        </div>
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
           <CardDescription>

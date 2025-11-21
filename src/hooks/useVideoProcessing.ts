@@ -58,7 +58,25 @@ export const useVideoProcessing = () => {
             console.warn('extract-transcript edge function failed:', err);
         }
 
-        // 2) Last resort: Try client-side transcript (limited by CORS)
+        // 2) Fallback: Whisper-only edge function (audio transcription)
+        try {
+            console.log('Trying whisper-transcribe fallback for:', videoId);
+            const { data, error } = await supabase.functions.invoke('whisper-transcribe', {
+                body: { videoId }
+            });
+            if (error) throw new Error(error.message || 'Failed to transcribe audio');
+            if (!data.success) throw new Error(data.error || 'Failed to transcribe audio');
+            console.log('✓ Successfully transcribed audio via whisper-transcribe');
+            return {
+                transcript: data.transcript,
+                videoTitle: data.videoTitle,
+                captionsAvailable: false,
+            };
+        } catch (error: any) {
+            console.warn('whisper-transcribe failed:', error);
+        }
+
+        // 3) Last resort: Try client-side transcript (limited by CORS)
         try {
             console.log('Trying client-side youtube-transcript for:', videoId);
             let segments: any[] | null = null;
