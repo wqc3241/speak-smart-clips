@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Youtube, BookOpen, MessageCircle, History, Loader2 } from 'lucide-react';
@@ -15,7 +16,14 @@ import { TEST_TRANSCRIPT, TEST_VIDEO_TITLE, TEST_VIDEO_URL } from "@/lib/constan
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('input');
+  const navigate = useNavigate();
   const { user, isCheckingAuth, handleLogout } = useAuth();
+
+  useEffect(() => {
+    if (!isCheckingAuth && !user) {
+      navigate("/auth");
+    }
+  }, [isCheckingAuth, user, navigate]);
   const {
     isProcessing,
     processingStep,

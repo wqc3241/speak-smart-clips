@@ -12,12 +12,9 @@ export const SignUpForm = () => {
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
-    const [fullName, setFullName] = useState("");
     const [errors, setErrors] = useState<{
         email?: string;
         password?: string;
-        confirmPassword?: string;
     }>({});
 
     const validateForm = () => {
@@ -33,9 +30,7 @@ export const SignUpForm = () => {
             newErrors.password = passwordResult.error.errors[0].message;
         }
 
-        if (password !== confirmPassword) {
-            newErrors.confirmPassword = "Passwords do not match";
-        }
+
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -54,9 +49,6 @@ export const SignUpForm = () => {
             password,
             options: {
                 emailRedirectTo: redirectUrl,
-                data: {
-                    full_name: fullName.trim() || null,
-                },
             },
         });
 
@@ -77,18 +69,7 @@ export const SignUpForm = () => {
 
     return (
         <form onSubmit={handleEmailSignUp} className="space-y-4">
-            <div className="space-y-2">
-                <Label htmlFor="signup-name">Full Name (optional)</Label>
-                <Input
-                    id="signup-name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    disabled={loading}
-                    maxLength={100}
-                />
-            </div>
+
 
             <div className="space-y-2">
                 <Label htmlFor="signup-email">Email</Label>
@@ -122,21 +103,7 @@ export const SignUpForm = () => {
                 )}
             </div>
 
-            <div className="space-y-2">
-                <Label htmlFor="signup-confirm">Confirm Password</Label>
-                <Input
-                    id="signup-confirm"
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    disabled={loading}
-                    required
-                />
-                {errors.confirmPassword && (
-                    <p className="text-sm text-destructive">{errors.confirmPassword}</p>
-                )}
-            </div>
+
 
             <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? (
