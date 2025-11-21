@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { MessageCircle, Mic, MicOff, Send, Volume2 } from 'lucide-react';
+import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 
 interface ConversationInterfaceProps {
   project: any;
@@ -30,7 +31,7 @@ export const ConversationInterface: React.FC<ConversationInterfaceProps> = ({ pr
   ]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isListening, setIsListening] = useState(false);
-  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const { speak, isPlaying, currentText } = useTextToSpeech();
 
   const handleSendMessage = () => {
     if (!currentMessage.trim()) return;
@@ -61,12 +62,6 @@ export const ConversationInterface: React.FC<ConversationInterfaceProps> = ({ pr
   const toggleListening = () => {
     setIsListening(!isListening);
     console.log('Speech recognition:', !isListening ? 'started' : 'stopped');
-  };
-
-  const speakText = (text: string) => {
-    setIsAISpeaking(true);
-    console.log('Speaking:', text);
-    setTimeout(() => setIsAISpeaking(false), 2000);
   };
 
   return (
@@ -100,10 +95,11 @@ export const ConversationInterface: React.FC<ConversationInterfaceProps> = ({ pr
                       variant="ghost"
                       size="sm"
                       className="mt-2 h-6 px-2"
-                      onClick={() => speakText(message.text)}
-                      disabled={isAISpeaking}
+                      onClick={() => speak(message.text)}
                     >
-                      <Volume2 className="w-3 h-3" />
+                      <Volume2 className={`w-3 h-3 ${
+                        isPlaying && currentText === message.text ? 'text-primary animate-pulse' : ''
+                      }`} />
                     </Button>
                   )}
                   {message.suggestedWords && (

@@ -32,14 +32,7 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   grammar,
   detectedLanguage
 }) => {
-  const { speak, isPlaying } = useTextToSpeech();
-  const [currentText, setCurrentText] = useState<string | null>(null);
-
-  const handleSpeak = async (text: string) => {
-    setCurrentText(text);
-    await speak(text);
-    setCurrentText(null);
-  };
+  const { speak, isPlaying, currentText } = useTextToSpeech();
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
@@ -71,11 +64,10 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 shrink-0"
-                      onClick={() => handleSpeak(item.word)}
-                      disabled={isPlaying && currentText === item.word}
+                      onClick={() => speak(item.word)}
                     >
                       {isPlaying && currentText === item.word ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                        <Volume2 className="h-3.5 w-3.5 animate-pulse text-primary" />
                       ) : (
                         <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
@@ -112,11 +104,10 @@ export const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                       variant="ghost"
                       size="icon"
                       className="h-5 w-5 shrink-0"
-                      onClick={() => handleSpeak(item.example)}
-                      disabled={isPlaying && currentText === item.example}
+                      onClick={() => speak(item.example)}
                     >
                       {isPlaying && currentText === item.example ? (
-                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                        <Volume2 className="h-3 w-3 animate-pulse text-primary" />
                       ) : (
                         <Volume2 className="h-3 w-3 text-muted-foreground" />
                       )}

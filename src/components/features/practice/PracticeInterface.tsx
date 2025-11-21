@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 
 interface PracticeSentence {
   text: string;
@@ -26,55 +27,9 @@ interface PracticeInterfaceProps {
 export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, onSentencesUpdate }) => {
   const [practiceSentences, setPracticeSentences] = useState<PracticeSentence[]>(project.practiceSentences || []);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentSpeaking, setCurrentSpeaking] = useState<string | null>(null);
   const [difficultyFilter, setDifficultyFilter] = useState<'all' | 'beginner' | 'intermediate' | 'advanced'>('all');
   const { toast } = useToast();
-
-  const getLanguageCode = (language?: string) => {
-    const languageMap: { [key: string]: string } = {
-      'japanese': 'ja-JP',
-      'spanish': 'es-ES',
-      'french': 'fr-FR',
-      'german': 'de-DE',
-      'italian': 'it-IT',
-      'portuguese': 'pt-PT',
-      'chinese': 'zh-CN',
-      'korean': 'ko-KR',
-      'russian': 'ru-RU',
-    };
-    return languageMap[language?.toLowerCase() || ""] || "en-US";
-  };
-
-  const speak = (text: string) => {
-    if (!('speechSynthesis' in window)) {
-      toast({
-        title: "Not Supported",
-        description: "Text-to-speech is not supported in your browser.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-
-    setCurrentSpeaking(text);
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = getLanguageCode(project.detectedLanguage);
-    utterance.rate = 0.8;
-    
-    utterance.onend = () => setCurrentSpeaking(null);
-    
-    utterance.onerror = () => {
-      setCurrentSpeaking(null);
-      toast({
-        title: "Pronunciation Error",
-        description: "Could not pronounce this text.",
-        variant: "destructive",
-      });
-    };
-
-    window.speechSynthesis.speak(utterance);
-  };
+  const { speak, isPlaying, currentText } = useTextToSpeech();
 
   const generateSentences = async () => {
     setIsLoading(true);
@@ -239,10 +194,9 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
                     size="icon"
                     className="h-8 w-8 shrink-0 mt-0.5"
                     onClick={() => speak(sentence.text)}
-                    disabled={currentSpeaking === sentence.text}
                   >
                     <Volume2 className={`h-4 w-4 ${
-                      currentSpeaking === sentence.text ? 'text-primary' : 'text-muted-foreground'
+                      isPlaying && currentText === sentence.text ? 'text-primary animate-pulse' : 'text-muted-foreground'
                     }`} />
                   </Button>
                   <div className="flex-1 min-w-0">
