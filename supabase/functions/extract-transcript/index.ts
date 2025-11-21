@@ -29,57 +29,85 @@ async function extractWithSupadata(videoId: string, languageCode?: string): Prom
   
   console.log('=== SUPADATA: API URL:', apiUrl);
 
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'x-api-key': supadataApiKey,
-      },
-    });
+  // Polling configuration for 202 responses
+  const maxRetries = 10;
+  const retryDelayMs = 2000; // 2 seconds between retries
 
-    console.log('=== SUPADATA: Response status:', response.status);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'x-api-key': supadataApiKey,
+        },
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('=== SUPADATA: API error:', response.status, errorText);
+      console.log(`=== SUPADATA: Response status: ${response.status} (attempt ${attempt + 1}/${maxRetries})`);
+
+      // Handle 202 Accepted - transcript is being processed
+      if (response.status === 202) {
+        console.log('=== SUPADATA: Transcript is being processed, will retry...');
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+          continue; // Retry
+        } else {
+          throw new Error('Transcript is still being processed. Please try again in a moment.');
+        }
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('=== SUPADATA: API error:', response.status, errorText);
+        
+        if (response.status === 404) {
+          throw new Error('This video does not have captions available or cannot be accessed');
+        } else if (response.status === 429) {
+          throw new Error('Rate limit exceeded. Please try again in a few minutes');
+        } else if (response.status === 401 || response.status === 403) {
+          throw new Error('API authentication failed');
+        }
+        
+        throw new Error(`Failed to extract transcript: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('=== SUPADATA: Response received, processing transcript...');
+
+      // Handle both response formats from Supadata
+      let transcript: string;
       
-      if (response.status === 404) {
-        throw new Error('This video does not have captions available or cannot be accessed');
-      } else if (response.status === 429) {
-        throw new Error('Rate limit exceeded. Please try again in a few minutes');
-      } else if (response.status === 401 || response.status === 403) {
-        throw new Error('API authentication failed');
+      if (typeof data.content === 'string') {
+        // When text=true or direct string response
+        transcript = data.content;
+      } else if (data.content && Array.isArray(data.content)) {
+        // When text=false, content is array of segments
+        transcript = data.content
+          .map((segment: any) => segment.text || segment.content || '')
+          .filter((text: string) => text.trim().length > 0)
+          .join(' ');
+      } else {
+        console.log('=== SUPADATA: No content found in response');
+        if (attempt < maxRetries - 1) {
+          console.log('=== SUPADATA: Will retry to fetch content...');
+          await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+          continue;
+        }
+        return null;
       }
       
-      throw new Error(`Failed to extract transcript: ${response.status}`);
+      console.log('=== SUPADATA: Successfully extracted transcript, length:', transcript.length);
+      return transcript;
+    } catch (error) {
+      if (attempt === maxRetries - 1) {
+        console.error('=== SUPADATA: Error after all retries:', error);
+        throw error;
+      }
+      console.log(`=== SUPADATA: Error on attempt ${attempt + 1}, will retry:`, error.message);
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
     }
-
-    const data = await response.json();
-    console.log('=== SUPADATA: Response received, processing transcript...');
-
-    // Handle both response formats from Supadata
-    let transcript: string;
-    
-    if (typeof data.content === 'string') {
-      // When text=true or direct string response
-      transcript = data.content;
-    } else if (data.content && Array.isArray(data.content)) {
-      // When text=false, content is array of segments
-      transcript = data.content
-        .map((segment: any) => segment.text || segment.content || '')
-        .filter((text: string) => text.trim().length > 0)
-        .join(' ');
-    } else {
-      console.log('=== SUPADATA: No content found in response');
-      return null;
-    }
-    
-    console.log('=== SUPADATA: Successfully extracted transcript, length:', transcript.length);
-    return transcript;
-  } catch (error) {
-    console.error('=== SUPADATA: Error:', error);
-    throw error;
   }
+
+  return null;
 }
 
 async function extractTranscript(videoId: string, languageCode?: string): Promise<string> {
@@ -167,6 +195,10 @@ serve(async (req) => {
     } else if (error.message.includes('captions') || error.message.includes('cannot be accessed')) {
       errorMessage = 'This video does not have captions available.';
       suggestion = 'Please try a different video that has captions or subtitles enabled.';
+    } else if (error.message.includes('still being processed')) {
+      errorMessage = 'Transcript is still being generated.';
+      suggestion = 'This video\'s transcript is being processed by YouTube. Please wait 30 seconds and try again.';
+      statusCode = 202;
     }
     
     const result: TranscriptResult = {
