@@ -1,3 +1,13 @@
 project_id = "evmamwdmwogmlezndueg"
 
 [functions.generate-speech]
+
+[functions.extract-transcript]
+
+[functions.analyze-content]
+
+[functions.generate-practice-sentences]
+
+[functions.get-available-languages]
+
+[functions.test-apis]
