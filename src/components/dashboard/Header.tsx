@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from "@/components/ui/button";
 import { LogOut, User as UserIcon } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
+import { AVATAR_URL } from "@/lib/constants";
 
 interface HeaderProps {
     user: User | null;
@@ -14,11 +15,11 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
             {/* Header - Desktop only */}
             <header className="hidden md:block border-b bg-card/50 backdrop-blur sticky top-0 z-10">
                 <div className="container mx-auto px-4 py-4 flex items-center gap-4">
-                    <img
-                        src="/avatar.png"
-                        alt="App Avatar"
-                        className="w-16 h-16 object-contain rounded-full hover:scale-110 transition-transform duration-300"
-                    />
+        <img
+          src={AVATAR_URL}
+          alt="App Avatar"
+          className="w-16 h-16 object-contain rounded-full hover:scale-110 transition-transform duration-300"
+        />
                     <div>
                         <h1 className="text-2xl font-bold text-foreground">
                             Speak Smart Clips
@@ -33,11 +34,11 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
             {/* Mobile Header */}
             <header className="md:hidden border-b bg-card sticky top-0 z-10 backdrop-blur">
                 <div className="px-4 py-3 flex items-center gap-3">
-                    <img
-                        src="/avatar.png"
-                        alt="App Avatar"
-                        className="w-10 h-10 object-contain rounded-full"
-                    />
+        <img
+          src={AVATAR_URL}
+          alt="App Avatar"
+          className="w-10 h-10 object-contain rounded-full"
+        />
                     <h1 className="text-lg font-bold text-foreground">Speak Smart Clips</h1>
                 </div>
             </header>

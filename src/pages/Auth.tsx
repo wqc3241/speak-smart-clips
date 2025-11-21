@@ -7,6 +7,7 @@ import { SignInForm } from "@/components/auth/SignInForm";
 import { SignUpForm } from "@/components/auth/SignUpForm";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
+import { AVATAR_URL } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 
 const Auth = () => {
@@ -83,11 +84,11 @@ const Auth = () => {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <div className="flex justify-center pt-6">
-          <img
-            src="/avatar.png"
-            alt="App Mascot"
-            className="w-32 h-32 object-contain hover:scale-110 transition-transform duration-300"
-          />
+            <img
+              src={AVATAR_URL}
+              alt="App Mascot"
+              className="w-32 h-32 object-contain hover:scale-110 transition-transform duration-300"
+            />
         </div>
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
