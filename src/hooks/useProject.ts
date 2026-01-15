@@ -13,6 +13,14 @@ export const useProject = (user: User | null) => {
         try {
             console.log('Auto-saving project to database...');
 
+            // Calculate counts from arrays
+            const vocabularyCount = Array.isArray(projectToSave.vocabulary) 
+                ? projectToSave.vocabulary.length 
+                : 0;
+            const grammarCount = Array.isArray(projectToSave.grammar) 
+                ? projectToSave.grammar.length 
+                : 0;
+
             // Check if project with this URL already exists for this user
             const { data: existing, error: checkError } = await supabase
                 .from('projects')
@@ -39,6 +47,8 @@ export const useProject = (user: User | null) => {
                         status: projectToSave.status || 'completed',
                         job_id: projectToSave.jobId,
                         error_message: projectToSave.errorMessage,
+                        vocabulary_count: vocabularyCount,
+                        grammar_count: grammarCount,
                         last_accessed: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
                     })
@@ -60,6 +70,8 @@ export const useProject = (user: User | null) => {
                         status: projectToSave.status || 'completed',
                         job_id: projectToSave.jobId,
                         error_message: projectToSave.errorMessage,
+                        vocabulary_count: vocabularyCount,
+                        grammar_count: grammarCount,
                         is_favorite: false,
                         user_id: user.id,
                     });
