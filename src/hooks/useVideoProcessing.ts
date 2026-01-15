@@ -235,6 +235,8 @@ export const useVideoProcessing = () => {
                     grammar,
                     practice_sentences: practiceSentences,
                     detected_language: detectedLanguage,
+                    vocabulary_count: vocabulary.length,
+                    grammar_count: grammar.length,
                     status: 'completed',
                     job_id: null,
                     error_message: null,
