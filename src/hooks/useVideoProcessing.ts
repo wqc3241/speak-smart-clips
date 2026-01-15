@@ -95,6 +95,16 @@ export const useVideoProcessing = () => {
                 throw error;
             }
 
+            // Check for rate limit or credit errors in the response
+            if (data.error) {
+                console.warn('AI analysis returned error:', data.error);
+                toast({
+                    title: "AI Analysis Issue",
+                    description: data.error,
+                    variant: "destructive"
+                });
+            }
+
             console.log('AI analysis result:', data);
 
             return {
@@ -104,6 +114,11 @@ export const useVideoProcessing = () => {
             };
         } catch (error) {
             console.error('Failed to analyze content with AI:', error);
+            toast({
+                title: "Analysis failed",
+                description: "Could not analyze content. Please try again.",
+                variant: "destructive"
+            });
             // Return empty arrays if AI analysis fails
             return {
                 vocabulary: [],
@@ -301,8 +316,14 @@ export const useVideoProcessing = () => {
             // Use selected language if available, otherwise use AI detected language
             const finalLanguage = selectedLanguageName || aiDetectedLang;
 
-            setProcessingStep('Generating practice sentences...');
-            const practiceSentences = await generatePracticeSentences(vocabulary, grammar, finalLanguage);
+            // Only generate practice sentences if we have vocabulary and grammar
+            let practiceSentences: any[] = [];
+            if (vocabulary.length > 0 && grammar.length > 0) {
+                setProcessingStep('Generating practice sentences...');
+                practiceSentences = await generatePracticeSentences(vocabulary, grammar, finalLanguage);
+            } else {
+                console.log('Skipping practice sentence generation - no vocabulary or grammar data');
+            }
 
             const project = {
                 id: Date.now(),
