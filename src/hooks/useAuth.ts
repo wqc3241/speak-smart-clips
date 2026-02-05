@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from '@supabase/supabase-js';
+import { DEV_TEST_MODE, TEST_USER } from '@/lib/constants';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -8,6 +9,15 @@ export const useAuth = () => {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
+    // If dev test mode is enabled, skip real auth
+    if (DEV_TEST_MODE) {
+      console.log('🧪 DEV TEST MODE: Skipping authentication');
+      setUser(TEST_USER as unknown as User);
+      setSession({ user: TEST_USER } as unknown as Session);
+      setIsCheckingAuth(false);
+      return;
+    }
+
     let mounted = true;
 
     const checkAuth = async () => {
@@ -56,6 +66,11 @@ export const useAuth = () => {
   }, []);
 
   const handleLogout = async () => {
+    if (DEV_TEST_MODE) {
+      // In test mode, just refresh to reset
+      window.location.reload();
+      return;
+    }
     await supabase.auth.signOut();
     window.location.href = '/auth';
   };
