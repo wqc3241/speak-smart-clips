@@ -72,8 +72,8 @@ export const StudyTab: React.FC<StudyTabProps> = ({
             {/* Language Selector */}
             {currentProject.detectedLanguage && (
                 <Card className="p-4">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                        <div className="flex items-center gap-2 flex-1">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground whitespace-nowrap">Detected language:</span>
                             <Select
                                 value={currentProject.detectedLanguage}
@@ -112,7 +112,6 @@ export const StudyTab: React.FC<StudyTabProps> = ({
                             size="sm"
                             onClick={onRegenerateAnalysis}
                             disabled={isProcessing}
-                            className="w-full sm:w-auto"
                         >
                             {isProcessing ? (
                                 <>
