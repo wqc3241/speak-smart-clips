@@ -3,6 +3,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from '@supabase/supabase-js';
 import { DEV_TEST_MODE, TEST_ACCOUNT } from '@/lib/constants';
 
+// Singleton to prevent multiple auto-login attempts across all hook instances
+const authState = {
+  autoLoginAttempted: false,
+  autoLoginPromise: null as Promise<void> | null,
+};
+
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -10,11 +16,21 @@ export const useAuth = () => {
 
   useEffect(() => {
     let mounted = true;
+    
+    // Set up auth state listener first (for both modes)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!mounted) return;
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session) {
+          setIsCheckingAuth(false);
+        }
+      }
+    );
 
     // If dev test mode is enabled, auto-login with test account
     if (DEV_TEST_MODE) {
-      console.log('🧪 DEV TEST MODE: Auto-logging in with test account');
-      
       const autoLogin = async () => {
         try {
           // Check if already logged in
@@ -31,24 +47,51 @@ export const useAuth = () => {
             return;
           }
           
-          // Not logged in, sign in with test credentials
-          console.log('🧪 DEV TEST MODE: Signing in with test account...');
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email: TEST_ACCOUNT.email,
-            password: TEST_ACCOUNT.password,
-          });
-          
-          if (!mounted) return;
-          
-          if (error) {
-            console.error('🧪 DEV TEST MODE: Auto-login failed:', error);
+          // If auto-login was already attempted, just wait and check session
+          if (authState.autoLoginAttempted) {
+            console.log('🧪 DEV TEST MODE: Waiting for existing auto-login...');
+            if (authState.autoLoginPromise) {
+              await authState.autoLoginPromise;
+            }
+            // After waiting, check session again
+            const { data: { session: newSession } } = await supabase.auth.getSession();
+            if (mounted && newSession) {
+              setSession(newSession);
+              setUser(newSession.user);
+            }
             setIsCheckingAuth(false);
             return;
           }
           
-          console.log('🧪 DEV TEST MODE: Successfully logged in as', data.user?.email);
-          setSession(data.session);
-          setUser(data.user);
+          // Not logged in, sign in with test credentials
+          console.log('🧪 DEV TEST MODE: Signing in with test account...');
+          authState.autoLoginAttempted = true;
+          
+          authState.autoLoginPromise = (async () => {
+            const { data, error } = await supabase.auth.signInWithPassword({
+              email: TEST_ACCOUNT.email,
+              password: TEST_ACCOUNT.password,
+            });
+            
+            if (error) {
+              console.error('🧪 DEV TEST MODE: Auto-login failed:', error);
+              return;
+            }
+            
+            console.log('🧪 DEV TEST MODE: Successfully logged in as', data.user?.email);
+          })();
+          
+          await authState.autoLoginPromise;
+          
+          // Get the session after login
+          const { data: { session: newSession } } = await supabase.auth.getSession();
+          
+          if (!mounted) return;
+          
+          if (newSession) {
+            setSession(newSession);
+            setUser(newSession.user);
+          }
           setIsCheckingAuth(false);
         } catch (error) {
           console.error('🧪 DEV TEST MODE: Auto-login error:', error);
@@ -57,15 +100,6 @@ export const useAuth = () => {
           }
         }
       };
-      
-      // Set up auth state listener for test mode too
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        (event, session) => {
-          if (!mounted) return;
-          setSession(session);
-          setUser(session?.user ?? null);
-        }
-      );
       
       autoLogin();
       
@@ -101,16 +135,6 @@ export const useAuth = () => {
         }
       }
     };
-
-    // Set up auth state listener for future changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (!mounted) return;
-        
-        setSession(session);
-        setUser(session?.user ?? null);
-      }
-    );
 
     checkAuth();
 
