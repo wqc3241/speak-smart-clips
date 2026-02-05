@@ -3,6 +3,30 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { CORS_HEADERS, TranscriptResult } from './types.ts';
 
+async function fetchVideoTitle(videoId: string, supadataApiKey: string): Promise<string> {
+  try {
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const response = await fetch(
+      `https://api.supadata.ai/v1/metadata?url=${encodeURIComponent(videoUrl)}`,
+      {
+        method: 'GET',
+        headers: { 'x-api-key': supadataApiKey },
+      }
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.title) {
+        console.log('=== SUPADATA: Fetched video title:', data.title);
+        return data.title;
+      }
+    }
+  } catch (error) {
+    console.warn('=== SUPADATA: Failed to fetch video title:', error);
+  }
+  return `Video ${videoId}`;
+}
+
 async function pollJobStatus(jobId: string, supadataApiKey: string): Promise<string> {
   const maxPollingAttempts = 24; // 24 attempts * 10 seconds = 240 seconds max
   const pollingInterval = 10000; // 10 seconds between checks to avoid rate limiting
@@ -143,10 +167,6 @@ async function extractTranscript(videoId: string, languageCode?: string): Promis
   }
 }
 
-function getVideoTitle(videoId: string): string {
-  return `Video ${videoId}`;
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: CORS_HEADERS });
@@ -163,7 +183,8 @@ serve(async (req) => {
 
     console.log('=== Extracting transcript for video ID:', videoId, 'language:', languageCode || 'auto');
 
-    const videoTitle = getVideoTitle(videoId);
+    const supadataApiKey = Deno.env.get('SUPADATA_API_KEY') || '';
+    const videoTitle = await fetchVideoTitle(videoId, supadataApiKey);
     const transcript = await extractTranscript(videoId, languageCode);
     
     if (!transcript || transcript.length < 50) {

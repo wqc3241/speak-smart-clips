@@ -6,6 +6,30 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+async function fetchVideoTitle(videoId: string, supadataApiKey: string): Promise<string> {
+  try {
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const response = await fetch(
+      `https://api.supadata.ai/v1/metadata?url=${encodeURIComponent(videoUrl)}`,
+      {
+        method: 'GET',
+        headers: { 'x-api-key': supadataApiKey },
+      }
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.title) {
+        console.log('=== POLL: Fetched video title:', data.title);
+        return data.title;
+      }
+    }
+  } catch (error) {
+    console.warn('=== POLL: Failed to fetch video title:', error);
+  }
+  return `Video ${videoId}`;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: CORS_HEADERS });
@@ -19,10 +43,11 @@ serve(async (req) => {
 
     // Validate input
     const requestSchema = z.object({
-      jobId: z.string()
+      jobId: z.string(),
+      videoId: z.string().optional()
     });
     
-    const { jobId } = requestSchema.parse(await req.json());
+    const { jobId, videoId } = requestSchema.parse(await req.json());
     console.log('=== POLL: Checking job status for:', jobId);
 
     // Make single GET request to check job status
@@ -42,10 +67,14 @@ serve(async (req) => {
 
     // Return current status
     if (data.status === 'completed') {
+      let videoTitle = 'Video Lesson';
+      if (videoId) {
+        videoTitle = await fetchVideoTitle(videoId, supadataApiKey);
+      }
       return new Response(JSON.stringify({
         status: 'completed',
         transcript: data.content,
-        videoTitle: `Video Lesson`
+        videoTitle
       }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
