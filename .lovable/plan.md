@@ -1,68 +1,165 @@
 
 
-## Update Existing Project Titles with Real Video Titles
+## Duolingo-Style Gamified Input Tab with Learning Units
 
-### Problem
-The existing projects in your database have placeholder titles like "Video HFHu4GqfKPg" instead of actual YouTube video titles. This makes it hard to identify projects.
+### Overview
+Transform the Input tab to have a compact "Add Video" section at the top, followed by a Duolingo-style gamified learning path with units. Each unit contains 10 random questions/challenges pulled from all saved projects' vocabulary and practice sentences.
 
-### Solution
-Create a new edge function that:
-1. Fetches all projects with placeholder titles (matching pattern "Video [videoId]")
-2. Extracts the video ID from each project's YouTube URL
-3. Fetches the actual title from Supadata metadata API
-4. Updates each project with the real title
-
-### Implementation
+### Changes
 
 ---
 
-**1. Create `supabase/functions/migrate-project-titles/index.ts`**
+**1. Redesign `src/components/dashboard/InputTab.tsx`**
 
-New edge function that:
-- Queries projects table for entries with placeholder titles
-- For each project, extracts video ID from `youtube_url`
-- Calls Supadata metadata API to get actual title
-- Updates the project title in the database
+Make the "Add Video" section more compact:
+- Reduce card padding and margins
+- Make the input and button smaller (h-10 instead of h-12)
+- Remove the card header, use inline title
+- Collapse the demo button into a smaller link-style button
+- Overall take up less vertical space
+
+---
+
+**2. Create `src/components/features/learning/LearningPath.tsx`**
+
+New component that displays a Duolingo-style learning path:
+
+```text
++------------------------------------------+
+|  UNIT 1: Basics                          |
+|  ○───○───●───○───○                       |
+|  [Start Lesson]                          |
++------------------------------------------+
+|  UNIT 2: Greetings                       |
+|  ○───○───○───○───○   (locked)            |
++------------------------------------------+
+```
+
+Visual design:
+- Vertical path with connected circles/nodes
+- Each unit is a card with:
+  - Unit number and title
+  - Progress indicator (completed lessons)
+  - Lesson button or locked state
+- Uses primary orange color (#F97316) for active states
+- Gray for locked/incomplete units
+
+---
+
+**3. Create `src/components/features/learning/QuizInterface.tsx`**
+
+New component for the 10-question quiz experience:
+
+Question types to implement:
+- **Multiple Choice**: "What does [word] mean?" with 4 options
+- **Translation**: "Translate: [sentence]" with word bank
+- **Fill in Blank**: "[Sentence with ___]" select the right word
+- **Listening**: Play audio, select correct meaning
+
+UI elements:
+- Progress bar showing question number (1/10)
+- Hearts/lives system (3 hearts, lose one per wrong answer)
+- XP reward animation on correct answers
+- Celebration screen at end showing score
+
+---
+
+**4. Create `src/hooks/useQuizData.ts`**
+
+Hook to generate quiz questions from all projects:
 
 ```typescript
-serve(async (req) => {
-  // Get Supabase admin client
-  // Query projects where title matches "Video [11-char-id]"
-  // For each project:
-  //   - Extract videoId from youtube_url
-  //   - Fetch title from Supadata API
-  //   - Update project title
-  // Return summary of updated projects
-});
+interface QuizQuestion {
+  type: 'multiple_choice' | 'translation' | 'fill_blank' | 'listening';
+  question: string;
+  correctAnswer: string;
+  options?: string[];
+  audioUrl?: string;
+  sourceProject: string;
+}
+
+const useQuizData = () => {
+  // Fetch all projects
+  // Extract vocabulary and practice_sentences
+  // Generate 10 random questions
+  // Mix question types for variety
+  return { questions, isLoading };
+};
 ```
 
 ---
 
-**2. Add to `supabase/config.toml`**
+**5. Update `src/pages/Index.tsx`**
 
-```toml
-[functions.migrate-project-titles]
-verify_jwt = false
-```
+Update the Input tab content to show:
+1. Compact Add Video card (top)
+2. LearningPath component (below)
+
+When user clicks "Start Lesson" on a unit, show QuizInterface.
 
 ---
 
-**3. Add a "Refresh Titles" button (optional)**
+### Data Flow
 
-Could add a button in ProjectManager to trigger this migration, or run it once manually via curl.
+```text
+All Projects in DB
+        │
+        ▼
+┌───────────────────────┐
+│ Vocabulary + Grammar  │
+│ + Practice Sentences  │
+└───────────────────────┘
+        │
+        ▼
+┌───────────────────────┐
+│ Generate 10 Random    │
+│ Quiz Questions        │
+└───────────────────────┘
+        │
+        ▼
+┌───────────────────────┐
+│ QuizInterface         │
+│ - Multiple choice     │
+│ - Translation         │
+│ - Fill in blank       │
+└───────────────────────┘
+```
 
 ---
 
 ### Files to Create/Modify
 
-| File | Action |
-|------|--------|
-| `supabase/functions/migrate-project-titles/index.ts` | Create new edge function |
-| `supabase/config.toml` | Add function configuration |
+| File | Action | Description |
+|------|--------|-------------|
+| `src/components/dashboard/InputTab.tsx` | Modify | Make Add Video section compact |
+| `src/components/features/learning/LearningPath.tsx` | Create | Duolingo-style unit path |
+| `src/components/features/learning/QuizInterface.tsx` | Create | 10-question quiz UI |
+| `src/components/features/learning/QuestionCard.tsx` | Create | Individual question display |
+| `src/hooks/useQuizData.ts` | Create | Generate quiz from projects |
+| `src/pages/Index.tsx` | Modify | Integrate learning path |
 
-### Execution
-After deployment, the function can be called once to update all existing project titles. The function will:
-- Skip projects that already have proper titles
-- Log progress for each project updated
-- Return a summary showing how many projects were updated
+---
+
+### Visual Design Details
+
+**Unit Card Design:**
+- Rounded corners with subtle shadow
+- Unit number in a circle badge
+- Title in bold
+- Progress dots showing completed lessons
+- Primary button for active unit, disabled for locked
+
+**Quiz Interface:**
+- Clean white background
+- Large, readable question text
+- Touch-friendly answer buttons (min 44px height)
+- Green flash for correct, red shake for wrong
+- Progress bar at top
+- Hearts in top-right corner
+
+**Gamification Elements:**
+- XP counter
+- Streak indicator
+- Completion celebration with confetti effect
+- Star rating based on hearts remaining
 
