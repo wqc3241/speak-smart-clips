@@ -1,165 +1,104 @@
 
 
-## Duolingo-Style Gamified Input Tab with Learning Units
+## Auto-Login with Test Account When DEV_TEST_MODE is Enabled
 
 ### Overview
-Transform the Input tab to have a compact "Add Video" section at the top, followed by a Duolingo-style gamified learning path with units. Each unit contains 10 random questions/challenges pulled from all saved projects' vocabulary and practice sentences.
+Change the test mode logic so that when `DEV_TEST_MODE` is `true`, the app automatically signs in with the test account (`qichaotomwang+1@gmail.com`) using Supabase authentication. This ensures you get a real authenticated session with a valid UUID, allowing all database queries to work correctly.
 
 ### Changes
 
 ---
 
-**1. Redesign `src/components/dashboard/InputTab.tsx`**
+**1. Update `src/lib/constants.ts`**
 
-Make the "Add Video" section more compact:
-- Reduce card padding and margins
-- Make the input and button smaller (h-10 instead of h-12)
-- Remove the card header, use inline title
-- Collapse the demo button into a smaller link-style button
-- Overall take up less vertical space
-
----
-
-**2. Create `src/components/features/learning/LearningPath.tsx`**
-
-New component that displays a Duolingo-style learning path:
-
-```text
-+------------------------------------------+
-|  UNIT 1: Basics                          |
-|  ○───○───●───○───○                       |
-|  [Start Lesson]                          |
-+------------------------------------------+
-|  UNIT 2: Greetings                       |
-|  ○───○───○───○───○   (locked)            |
-+------------------------------------------+
-```
-
-Visual design:
-- Vertical path with connected circles/nodes
-- Each unit is a card with:
-  - Unit number and title
-  - Progress indicator (completed lessons)
-  - Lesson button or locked state
-- Uses primary orange color (#F97316) for active states
-- Gray for locked/incomplete units
-
----
-
-**3. Create `src/components/features/learning/QuizInterface.tsx`**
-
-New component for the 10-question quiz experience:
-
-Question types to implement:
-- **Multiple Choice**: "What does [word] mean?" with 4 options
-- **Translation**: "Translate: [sentence]" with word bank
-- **Fill in Blank**: "[Sentence with ___]" select the right word
-- **Listening**: Play audio, select correct meaning
-
-UI elements:
-- Progress bar showing question number (1/10)
-- Hearts/lives system (3 hearts, lose one per wrong answer)
-- XP reward animation on correct answers
-- Celebration screen at end showing score
-
----
-
-**4. Create `src/hooks/useQuizData.ts`**
-
-Hook to generate quiz questions from all projects:
+Add test account credentials:
 
 ```typescript
-interface QuizQuestion {
-  type: 'multiple_choice' | 'translation' | 'fill_blank' | 'listening';
-  question: string;
-  correctAnswer: string;
-  options?: string[];
-  audioUrl?: string;
-  sourceProject: string;
-}
+// Development testing mode - set to true to auto-login with test account
+export const DEV_TEST_MODE = true;
 
-const useQuizData = () => {
-  // Fetch all projects
-  // Extract vocabulary and practice_sentences
-  // Generate 10 random questions
-  // Mix question types for variety
-  return { questions, isLoading };
+// Test account credentials for auto-login
+export const TEST_ACCOUNT = {
+  email: 'qichaotomwang+1@gmail.com',
+  password: '******', // You'll need to provide the password
 };
+
+// Remove or keep TEST_USER as fallback (optional)
 ```
 
 ---
 
-**5. Update `src/pages/Index.tsx`**
+**2. Update `src/hooks/useAuth.ts`**
 
-Update the Input tab content to show:
-1. Compact Add Video card (top)
-2. LearningPath component (below)
+Change the test mode logic to perform actual Supabase sign-in:
 
-When user clicks "Start Lesson" on a unit, show QuizInterface.
-
----
-
-### Data Flow
-
-```text
-All Projects in DB
-        │
-        ▼
-┌───────────────────────┐
-│ Vocabulary + Grammar  │
-│ + Practice Sentences  │
-└───────────────────────┘
-        │
-        ▼
-┌───────────────────────┐
-│ Generate 10 Random    │
-│ Quiz Questions        │
-└───────────────────────┘
-        │
-        ▼
-┌───────────────────────┐
-│ QuizInterface         │
-│ - Multiple choice     │
-│ - Translation         │
-│ - Fill in blank       │
-└───────────────────────┘
+```typescript
+useEffect(() => {
+  if (DEV_TEST_MODE) {
+    console.log('🧪 DEV TEST MODE: Auto-logging in with test account');
+    
+    const autoLogin = async () => {
+      // Check if already logged in
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      
+      if (existingSession) {
+        // Already logged in, use existing session
+        setSession(existingSession);
+        setUser(existingSession.user);
+        setIsCheckingAuth(false);
+        return;
+      }
+      
+      // Not logged in, sign in with test credentials
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: TEST_ACCOUNT.email,
+        password: TEST_ACCOUNT.password,
+      });
+      
+      if (error) {
+        console.error('Auto-login failed:', error);
+        setIsCheckingAuth(false);
+        return;
+      }
+      
+      setSession(data.session);
+      setUser(data.user);
+      setIsCheckingAuth(false);
+    };
+    
+    autoLogin();
+    return;
+  }
+  
+  // ... rest of normal auth logic
+}, []);
 ```
 
 ---
 
-### Files to Create/Modify
+**3. Update `src/pages/Auth.tsx`**
 
-| File | Action | Description |
-|------|--------|-------------|
-| `src/components/dashboard/InputTab.tsx` | Modify | Make Add Video section compact |
-| `src/components/features/learning/LearningPath.tsx` | Create | Duolingo-style unit path |
-| `src/components/features/learning/QuizInterface.tsx` | Create | 10-question quiz UI |
-| `src/components/features/learning/QuestionCard.tsx` | Create | Individual question display |
-| `src/hooks/useQuizData.ts` | Create | Generate quiz from projects |
-| `src/pages/Index.tsx` | Modify | Integrate learning path |
+Ensure the auth page also auto-redirects when test mode is enabled (already does this, but will work better with real session).
 
 ---
 
-### Visual Design Details
+### Files to Modify
 
-**Unit Card Design:**
-- Rounded corners with subtle shadow
-- Unit number in a circle badge
-- Title in bold
-- Progress dots showing completed lessons
-- Primary button for active unit, disabled for locked
+| File | Change |
+|------|--------|
+| `src/lib/constants.ts` | Add `TEST_ACCOUNT` with email and password |
+| `src/hooks/useAuth.ts` | Change test mode to perform real Supabase sign-in |
 
-**Quiz Interface:**
-- Clean white background
-- Large, readable question text
-- Touch-friendly answer buttons (min 44px height)
-- Green flash for correct, red shake for wrong
-- Progress bar at top
-- Hearts in top-right corner
+### Security Note
 
-**Gamification Elements:**
-- XP counter
-- Streak indicator
-- Completion celebration with confetti effect
-- Star rating based on hearts remaining
+The test password will be stored in the code. This is acceptable for development/testing purposes, but make sure:
+- This is a test account only, not used for production
+- Don't commit sensitive passwords to public repositories
+
+### Benefits
+
+- Real authenticated session with valid UUID
+- All database queries work correctly (projects, profiles, etc.)
+- Learning path will load your actual project data
+- Full feature testing with real data
 
