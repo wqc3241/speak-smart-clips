@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { VideoPreview } from "@/components/features/video/VideoPreview";
-import { Youtube, Loader2, Beaker } from 'lucide-react';
+ import { Youtube, Loader2, Plus } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+ import { LearningPath } from "@/components/features/learning/LearningPath";
+ import { QuizInterface } from "@/components/features/learning/QuizInterface";
 
 interface InputTabProps {
     isProcessing: boolean;
@@ -25,6 +26,8 @@ export const InputTab: React.FC<InputTabProps> = ({
     const [selectedLanguage, setSelectedLanguage] = useState<string>('');
     const [pendingVideoId, setPendingVideoId] = useState<string>('');
     const { toast } = useToast();
+ 
+     const [activeQuiz, setActiveQuiz] = useState<{ unitId: number } | null>(null);
 
     const extractVideoId = (url: string) => {
         const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/);
@@ -80,72 +83,63 @@ export const InputTab: React.FC<InputTabProps> = ({
         await onProcessVideo(pendingVideoId, languageCode, selectedLanguage);
     };
 
+     // If quiz is active, show quiz interface
+     if (activeQuiz) {
+         return (
+             <QuizInterface
+                 unitId={activeQuiz.unitId}
+                 onComplete={() => setActiveQuiz(null)}
+                 onExit={() => setActiveQuiz(null)}
+             />
+         );
+     }
+ 
     return (
-        <div className="space-y-4 md:space-y-6">
-            <Card className="border-none shadow-none md:border md:shadow-sm">
-                <CardHeader className="px-0 md:px-6">
-                    <CardTitle className="text-xl flex items-center gap-2">
-                        <Youtube className="w-5 h-5 text-primary" />
-                        Add Video
-                    </CardTitle>
-                    <CardDescription>
-                        Paste a YouTube URL to start learning
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 px-0 md:px-6">
-                    <Input
-                        placeholder="YouTube video URL..."
-                        value={youtubeUrl}
-                        onChange={(e) => setYoutubeUrl(e.target.value)}
-                        className="h-12 text-base"
-                    />
-                    <Button
-                        onClick={handleUrlSubmit}
-                        className="w-full h-12 text-base"
-                        size="lg"
-                        disabled={isProcessing}
-                    >
-                        {isProcessing ? (
-                            <>
-                                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                                Processing...
-                            </>
-                        ) : (
-                            <>
-                                <Youtube className="w-5 h-5 mr-2" />
-                                Process Video
-                            </>
-                        )}
-                    </Button>
-
-                    {isProcessing && processingStep && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground animate-fade-in">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>{processingStep}</span>
-                        </div>
-                    )}
-
-                    <Button
-                        onClick={onUseTestData}
-                        variant="outline"
-                        size="sm"
-                        disabled={isProcessing}
-                        className="w-full gap-2"
-                    >
-                        {isProcessing ? (
-                            <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Loading...
-                            </>
-                        ) : (
-                            <>
-                                <Beaker className="w-4 h-4" />
-                                See Demo
-                            </>
-                        )}
-                    </Button>
-                </CardContent>
-            </Card>
+         <div className="space-y-6">
+             {/* Compact Add Video Section */}
+             <Card className="border bg-card/50">
+                 <CardContent className="p-3">
+                     <div className="flex items-center gap-2">
+                         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                             <Plus className="w-4 h-4" />
+                             <span className="hidden sm:inline">Add Video</span>
+                         </div>
+                         <Input
+                             placeholder="Paste YouTube URL..."
+                             value={youtubeUrl}
+                             onChange={(e) => setYoutubeUrl(e.target.value)}
+                             className="h-9 flex-1"
+                         />
+                         <Button
+                             onClick={handleUrlSubmit}
+                             size="sm"
+                             disabled={isProcessing}
+                             className="h-9 px-4"
+                         >
+                             {isProcessing ? (
+                                 <Loader2 className="w-4 h-4 animate-spin" />
+                             ) : (
+                                 <Youtube className="w-4 h-4" />
+                             )}
+                         </Button>
+                         <Button
+                             onClick={onUseTestData}
+                             variant="ghost"
+                             size="sm"
+                             disabled={isProcessing}
+                             className="h-9 text-xs text-muted-foreground hover:text-foreground"
+                         >
+                             Demo
+                         </Button>
+                     </div>
+                     {isProcessing && processingStep && (
+                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 animate-fade-in">
+                             <Loader2 className="w-3 h-3 animate-spin" />
+                             <span>{processingStep}</span>
+                         </div>
+                     )}
+                 </CardContent>
+             </Card>
 
             {/* Language Selection Dialog */}
             {showLanguageSelector && (
@@ -205,9 +199,8 @@ export const InputTab: React.FC<InputTabProps> = ({
                 </Card>
             )}
 
-            {youtubeUrl && !showLanguageSelector && (
-                <VideoPreview url={youtubeUrl} />
-            )}
+             {/* Duolingo-style Learning Path */}
+             <LearningPath onStartLesson={(unitId) => setActiveQuiz({ unitId })} />
         </div>
     );
 };
