@@ -15,18 +15,23 @@
  interface VocabularyItem {
    word: string;
    reading?: string;
-   meaning: string;
+  meaning?: string;
+  definition?: string;
    partOfSpeech?: string;
  }
  
  interface PracticeSentence {
    japanese?: string;
    original?: string;
+  text?: string;
    english?: string;
    translation?: string;
    romanization?: string;
  }
  
+// Helper to get meaning from either field name
+const getMeaning = (v: VocabularyItem): string | undefined => v.meaning || v.definition;
+
  export const useQuizData = () => {
    const [questions, setQuestions] = useState<QuizQuestion[]>([]);
    const [isLoading, setIsLoading] = useState(true);
@@ -78,24 +83,25 @@
        const shuffledVocab = [...allVocabulary].sort(() => Math.random() - 0.5);
        for (let i = 0; i < Math.min(5, shuffledVocab.length); i++) {
          const vocab = shuffledVocab[i];
-         if (!vocab.item.word || !vocab.item.meaning) continue;
+          const meaning = getMeaning(vocab.item);
+          if (!vocab.item.word || !meaning) continue;
  
          // Get 3 wrong answers from other vocabulary
          const wrongAnswers = allVocabulary
-           .filter((v) => v.item.meaning !== vocab.item.meaning)
+            .filter((v) => getMeaning(v.item) !== meaning)
            .sort(() => Math.random() - 0.5)
            .slice(0, 3)
-           .map((v) => v.item.meaning);
+            .map((v) => getMeaning(v.item)!);
  
          if (wrongAnswers.length < 3) continue;
  
-         const options = [...wrongAnswers, vocab.item.meaning].sort(() => Math.random() - 0.5);
+          const options = [...wrongAnswers, meaning].sort(() => Math.random() - 0.5);
  
          generatedQuestions.push({
            id: `vocab-${i}`,
            type: 'multiple_choice',
            question: `What does "${vocab.item.word}" mean?`,
-           correctAnswer: vocab.item.meaning,
+            correctAnswer: meaning,
            options,
            sourceProject: vocab.project,
            originalText: vocab.item.word,
@@ -106,7 +112,7 @@
        const shuffledSentences = [...allSentences].sort(() => Math.random() - 0.5);
        for (let i = 0; i < Math.min(3, shuffledSentences.length); i++) {
          const sentence = shuffledSentences[i];
-         const original = sentence.item.japanese || sentence.item.original;
+          const original = sentence.item.japanese || sentence.item.original || sentence.item.text;
          const translation = sentence.item.english || sentence.item.translation;
  
          if (!original || !translation) continue;
@@ -139,7 +145,8 @@
        // Generate fill-in-blank questions
        for (let i = 0; i < Math.min(2, shuffledVocab.length); i++) {
          const vocab = shuffledVocab[shuffledVocab.length - 1 - i]; // Use different vocab
-         if (!vocab?.item.word || !vocab?.item.meaning) continue;
+          const meaning = vocab ? getMeaning(vocab.item) : undefined;
+          if (!vocab?.item.word || !meaning) continue;
  
          const wrongWords = allVocabulary
            .filter((v) => v.item.word !== vocab.item.word)
@@ -154,7 +161,7 @@
          generatedQuestions.push({
            id: `fill-${i}`,
            type: 'fill_blank',
-           question: `Which word means "${vocab.item.meaning}"?`,
+            question: `Which word means "${meaning}"?`,
            correctAnswer: vocab.item.word,
            options,
            sourceProject: vocab.project,
