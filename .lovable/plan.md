@@ -1,56 +1,77 @@
 
 
-## Fix Language Selector UI Layout
+## Use Actual YouTube Video Title for Saved Projects
 
-### Issue
-On mobile/smaller screens, the "Regenerate Analysis" button drops to a new line and stretches to full width, creating an unbalanced visual appearance where the compact language selector sits above a wide button.
+### Problem
+Currently, projects are being saved with the YouTube URL or a placeholder like "Video Lesson - {videoId}" instead of the actual video title. This makes it hard to identify projects in the project list.
 
 ### Solution
-Adjust the layout so all elements stay on one line when there's space, and on mobile, center the stacked elements for better visual balance.
+Fetch the actual video title from the Supadata metadata API before/during transcript extraction and use it as the project title.
 
 ### Changes
 
-**File:** `src/components/dashboard/StudyTab.tsx`
+---
 
-Update the language selector card layout (lines 74-133):
+**1. Update `supabase/functions/extract-transcript/index.ts`**
 
-| Current | Fix |
-|---------|-----|
-| Button uses `w-full sm:w-auto` | Remove `w-full`, keep button compact always |
-| `flex-col sm:flex-row` stacking | Use `flex-wrap` to allow natural wrapping |
-| `items-start sm:items-center` | Use `items-center` always for vertical alignment |
+Add a function to fetch video metadata from Supadata and get the real title:
 
-```tsx
-{/* Language Selector */}
-{currentProject.detectedLanguage && (
-    <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Detected language:</span>
-                <Select ...>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue />
-                    </SelectTrigger>
-                    ...
-                </Select>
-            </div>
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={onRegenerateAnalysis}
-                disabled={isProcessing}
-            >
-                {/* button content */}
-            </Button>
-        </div>
-        ...
-    </Card>
-)}
+```typescript
+async function fetchVideoTitle(videoId: string, supadataApiKey: string): Promise<string> {
+  try {
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const response = await fetch(
+      `https://api.supadata.ai/v1/metadata?url=${encodeURIComponent(videoUrl)}`,
+      {
+        method: 'GET',
+        headers: { 'x-api-key': supadataApiKey },
+      }
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.title) {
+        return data.title;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to fetch video title:', error);
+  }
+  return `Video ${videoId}`; // Fallback
+}
 ```
 
+Update the main handler to fetch the title before returning:
+
+```typescript
+// In the serve handler, before returning:
+const supadataApiKey = Deno.env.get('SUPADATA_API_KEY');
+const videoTitle = await fetchVideoTitle(videoId, supadataApiKey);
+```
+
+---
+
+**2. Update `supabase/functions/poll-transcript-job/index.ts`**
+
+For async jobs, also fetch the video title when the job completes. Pass the videoId to the polling function and fetch metadata.
+
+---
+
+**3. Update `src/hooks/useVideoProcessing.ts`**
+
+The frontend already handles `videoTitle` from the API response - no changes needed if the edge functions return the correct title.
+
+---
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `supabase/functions/extract-transcript/index.ts` | Add `fetchVideoTitle()` function and use it to get real video title |
+| `supabase/functions/poll-transcript-job/index.ts` | Accept videoId, fetch real title when job completes |
+
 ### Result
-- All elements stay on one line when there's room
-- On narrow screens, elements wrap naturally without the button stretching
-- Consistent vertical alignment
-- Cleaner, more balanced appearance
+- New projects will display the actual YouTube video title (e.g., "Learn Japanese with Anime")
+- Existing projects will keep their current titles (no retroactive change)
+- Fallback to "Video {videoId}" if metadata fetch fails
 
