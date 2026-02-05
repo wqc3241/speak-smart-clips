@@ -1,93 +1,47 @@
 
-## Fix: Quiz Not Loading Due to Vocabulary Field Mismatch
+## Fix: Constrain Quiz Option Widths to Fit Within Section
 
-### Problem Identified
-The quiz shows "Not enough content to generate a quiz" because the **vocabulary data structure from the database doesn't match what the code expects**.
-
-**Database structure:**
-```json
-{
-  "word": "こんにちは",
-  "definition": "Hello",
-  "difficulty": "beginner"
-}
-```
-
-**Code expects:**
-```typescript
-interface VocabularyItem {
-  word: string;
-  meaning: string;  // ← Not found, so questions are skipped
-}
-```
-
-The same issue affects practice sentences:
-- Database uses: `text`, `translation`
-- Code looks for: `japanese`/`original`, `english`/`translation`
+### Problem
+The quiz option buttons are overflowing their container. Long text like "To change color; to turn red or yellow (of leaves)" gets cut off because the button text doesn't wrap properly.
 
 ### Solution
-Update the `VocabularyItem` and `PracticeSentence` interfaces in `useQuizData.ts` to handle both field naming conventions.
+Add text wrapping and overflow handling to the option buttons so that long answer text wraps to multiple lines instead of overflowing.
 
 ### Changes
 
 ---
 
-**File: `src/hooks/useQuizData.ts`**
+**File: `src/components/features/learning/QuizInterface.tsx`**
 
-1. Update the `VocabularyItem` interface to include `definition` as an alternative:
-
-```typescript
-interface VocabularyItem {
-  word: string;
-  reading?: string;
-  meaning?: string;
-  definition?: string;  // Add this - used by API
-  partOfSpeech?: string;
-}
-```
-
-2. Update the `PracticeSentence` interface to include `text`:
+Update the option Button styling (around line 220-221) to add:
+- `whitespace-normal` - Allow text to wrap to multiple lines
+- `text-wrap` or `break-words` - Ensure words break properly
+- Keep `w-full` on the button to ensure it fills the container width
 
 ```typescript
-interface PracticeSentence {
-  japanese?: string;
-  original?: string;
-  text?: string;  // Add this - used by API
-  english?: string;
-  translation?: string;
-  romanization?: string;
-}
+<Button
+  key={index}
+  variant="outline"
+  className={cn(
+    'h-auto py-4 px-4 text-left justify-start text-base font-normal transition-all whitespace-normal break-words w-full',
+    // ... rest of styling
+  )}
+>
 ```
 
-3. Update the vocabulary processing logic to use either field:
+Also update the inner span to allow proper text wrapping:
 
 ```typescript
-// Line 81 - Handle both "meaning" and "definition"
-const getMeaning = (v: VocabularyItem) => v.meaning || v.definition;
-
-for (let i = 0; i < Math.min(5, shuffledVocab.length); i++) {
-  const vocab = shuffledVocab[i];
-  const meaning = getMeaning(vocab.item);
-  if (!vocab.item.word || !meaning) continue;
-
-  const wrongAnswers = allVocabulary
-    .filter((v) => getMeaning(v.item) !== meaning)
-    .sort(() => Math.random() - 0.5)
-    .slice(0, 3)
-    .map((v) => getMeaning(v.item)!);
-
-  // ... rest of logic using `meaning` variable
-}
+<div className="flex items-center gap-3 w-full min-w-0">
+  <span className="flex-1 break-words">{option}</span>
+  {/* icons */}
+</div>
 ```
 
-4. Update the sentence processing logic:
-
-```typescript
-// Line 109 - Handle "text" in addition to "japanese" and "original"
-const original = sentence.item.japanese || sentence.item.original || sentence.item.text;
-```
-
-5. Update fill-in-blank questions similarly to use `getMeaning` helper.
+The key changes:
+- `whitespace-normal` - Overrides any whitespace restrictions, allowing text to wrap
+- `break-words` - Breaks long words if needed to prevent overflow
+- `min-w-0` on the flex container - Allows flex children to shrink below their content size
 
 ---
 
@@ -95,12 +49,4 @@ const original = sentence.item.japanese || sentence.item.original || sentence.it
 
 | File | Change |
 |------|--------|
-| `src/hooks/useQuizData.ts` | Add `definition` to VocabularyItem interface, add `text` to PracticeSentence interface, update processing logic to handle both naming conventions |
-
-### Technical Details
-
-The root cause is a mismatch between two naming conventions used at different times:
-- Older convention: `meaning`, `japanese`, `original`
-- Current API convention: `definition`, `text`, `translation`
-
-By supporting both, we ensure backward compatibility with any existing data while working with the current API format.
+| `src/components/features/learning/QuizInterface.tsx` | Add `whitespace-normal`, `break-words`, and `min-w-0` to option buttons and inner elements for proper text wrapping |
