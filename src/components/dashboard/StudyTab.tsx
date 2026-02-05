@@ -4,8 +4,21 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScriptDisplay } from "@/components/features/video/ScriptDisplay";
 import { VocabularyPanel } from "@/components/features/vocabulary/VocabularyPanel";
-import { BookOpen, Loader2, AlertCircle } from 'lucide-react';
+import { BookOpen, Loader2, AlertCircle, Youtube } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
+
+function extractVideoId(url: string): string | null {
+    const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+        /^([a-zA-Z0-9_-]{11})$/
+    ];
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match) return match[1];
+    }
+    return null;
+}
 
 interface StudyTabProps {
     currentProject: any;
@@ -71,64 +84,82 @@ export const StudyTab: React.FC<StudyTabProps> = ({
 
             {/* Language Selector */}
             {currentProject.detectedLanguage && (
-                <Card className="p-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground whitespace-nowrap">Detected language:</span>
-                            <Select
-                                value={currentProject.detectedLanguage}
-                                onValueChange={(value) => {
-                                    onUpdateProject({
-                                        ...currentProject,
-                                        detectedLanguage: value
-                                    });
-                                    toast({
-                                        title: "Language updated",
-                                        description: `Changed to ${value}. Click "Regenerate" to re-analyze.`
-                                    });
-                                }}
-                            >
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Japanese">Japanese</SelectItem>
-                                    <SelectItem value="Chinese">Chinese (Mandarin)</SelectItem>
-                                    <SelectItem value="Korean">Korean</SelectItem>
-                                    <SelectItem value="Spanish">Spanish</SelectItem>
-                                    <SelectItem value="French">French</SelectItem>
-                                    <SelectItem value="German">German</SelectItem>
-                                    <SelectItem value="Italian">Italian</SelectItem>
-                                    <SelectItem value="Portuguese">Portuguese</SelectItem>
-                                    <SelectItem value="Russian">Russian</SelectItem>
-                                    <SelectItem value="Arabic">Arabic</SelectItem>
-                                    <SelectItem value="Hindi">Hindi</SelectItem>
-                                    <SelectItem value="Other">Other</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={onRegenerateAnalysis}
-                            disabled={isProcessing}
-                        >
-                            {isProcessing ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Regenerating...
-                                </>
-                            ) : (
-                                'Regenerate Analysis'
-                            )}
-                        </Button>
-                    </div>
-                    {isProcessing && processingStep && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-3 animate-fade-in">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>{processingStep}</span>
+                <Card className="overflow-hidden">
+                    {/* YouTube Video Embed */}
+                    {currentProject.url && extractVideoId(currentProject.url) && (
+                        <div className="bg-muted">
+                            <AspectRatio ratio={16 / 9}>
+                                <iframe
+                                    src={`https://www.youtube.com/embed/${extractVideoId(currentProject.url)}`}
+                                    title={currentProject.title || "YouTube video"}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                    className="w-full h-full"
+                                />
+                            </AspectRatio>
                         </div>
                     )}
+                    
+                    {/* Language Controls */}
+                    <div className="p-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground whitespace-nowrap">Detected language:</span>
+                                <Select
+                                    value={currentProject.detectedLanguage}
+                                    onValueChange={(value) => {
+                                        onUpdateProject({
+                                            ...currentProject,
+                                            detectedLanguage: value
+                                        });
+                                        toast({
+                                            title: "Language updated",
+                                            description: `Changed to ${value}. Click "Regenerate" to re-analyze.`
+                                        });
+                                    }}
+                                >
+                                    <SelectTrigger className="w-[180px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Japanese">Japanese</SelectItem>
+                                        <SelectItem value="Chinese">Chinese (Mandarin)</SelectItem>
+                                        <SelectItem value="Korean">Korean</SelectItem>
+                                        <SelectItem value="Spanish">Spanish</SelectItem>
+                                        <SelectItem value="French">French</SelectItem>
+                                        <SelectItem value="German">German</SelectItem>
+                                        <SelectItem value="Italian">Italian</SelectItem>
+                                        <SelectItem value="Portuguese">Portuguese</SelectItem>
+                                        <SelectItem value="Russian">Russian</SelectItem>
+                                        <SelectItem value="Arabic">Arabic</SelectItem>
+                                        <SelectItem value="Hindi">Hindi</SelectItem>
+                                        <SelectItem value="Other">Other</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={onRegenerateAnalysis}
+                                disabled={isProcessing}
+                            >
+                                {isProcessing ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Regenerating...
+                                    </>
+                                ) : (
+                                    'Regenerate Analysis'
+                                )}
+                            </Button>
+                        </div>
+                        {isProcessing && processingStep && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground mt-3 animate-fade-in">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>{processingStep}</span>
+                            </div>
+                        )}
+                    </div>
                 </Card>
             )}
 
