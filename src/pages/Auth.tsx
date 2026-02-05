@@ -7,7 +7,7 @@ import { SignInForm } from "@/components/auth/SignInForm";
 import { SignUpForm } from "@/components/auth/SignUpForm";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
-import { AVATAR_URL } from "@/lib/constants";
+import { AVATAR_URL, DEV_TEST_MODE } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 
 const Auth = () => {
@@ -16,6 +16,12 @@ const Auth = () => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   useEffect(() => {
+    // In dev test mode, redirect straight to main app
+    if (DEV_TEST_MODE) {
+      navigate('/');
+      return;
+    }
+
     // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
