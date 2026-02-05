@@ -158,14 +158,14 @@ export const useVideoProcessing = () => {
         }
     };
 
-    const startJobPolling = (jobId: string, initialProject: any, onComplete: (project: any) => void) => {
+    const startJobPolling = (jobId: string, videoId: string, initialProject: any, onComplete: (project: any) => void) => {
         console.log('Starting background polling for job:', jobId);
         
         const pollInterval = setInterval(async () => {
             try {
                 console.log('Polling job:', jobId);
                 const { data, error } = await supabase.functions.invoke('poll-transcript-job', {
-                    body: { jobId }
+                    body: { jobId, videoId }
                 });
 
                 if (error) {
@@ -301,7 +301,7 @@ export const useVideoProcessing = () => {
 
                 // Start background polling
                 if (onProjectUpdate) {
-                    startJobPolling(result.jobId, pendingProject, onProjectUpdate);
+                    startJobPolling(result.jobId, videoId, pendingProject, onProjectUpdate);
                 }
 
                 setIsProcessing(false);
