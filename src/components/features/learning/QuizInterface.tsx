@@ -218,7 +218,7 @@
                    key={index}
                    variant="outline"
                    className={cn(
-                     'h-auto py-4 px-4 text-left justify-start text-base font-normal transition-all',
+                     'h-auto py-4 px-4 text-left justify-start text-base font-normal transition-all whitespace-normal break-words w-full',
                      showResult && isCorrectOption && 'border-green-500 bg-green-50 dark:bg-green-950/30',
                      showResult && isSelected && !isCorrectOption && 'border-destructive bg-destructive/10',
                      !showResult && 'hover:border-primary hover:bg-primary/5'
@@ -226,8 +226,8 @@
                    onClick={() => handleAnswer(option)}
                    disabled={showResult}
                  >
-                   <div className="flex items-center gap-3 w-full">
-                     <span className="flex-1">{option}</span>
+                   <div className="flex items-center gap-3 w-full min-w-0">
+                     <span className="flex-1 min-w-0 break-words">{option}</span>
                      {showResult && isCorrectOption && (
                        <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0" />
                      )}
