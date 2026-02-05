@@ -13,3 +13,6 @@ project_id = "evmamwdmwogmlezndueg"
 [functions.get-available-languages]
 
 [functions.test-apis]
+ 
+ [functions.migrate-project-titles]
+ verify_jwt = false
