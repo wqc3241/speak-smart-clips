@@ -1,84 +1,93 @@
 
+## Fix: Quiz Not Loading Due to Vocabulary Field Mismatch
 
-## Auto-Login with Test Account When DEV_TEST_MODE is Enabled
+### Problem Identified
+The quiz shows "Not enough content to generate a quiz" because the **vocabulary data structure from the database doesn't match what the code expects**.
 
-### Overview
-Change the test mode logic so that when `DEV_TEST_MODE` is `true`, the app automatically signs in with the test account (`qichaotomwang+1@gmail.com`) using Supabase authentication. This ensures you get a real authenticated session with a valid UUID, allowing all database queries to work correctly.
+**Database structure:**
+```json
+{
+  "word": "こんにちは",
+  "definition": "Hello",
+  "difficulty": "beginner"
+}
+```
+
+**Code expects:**
+```typescript
+interface VocabularyItem {
+  word: string;
+  meaning: string;  // ← Not found, so questions are skipped
+}
+```
+
+The same issue affects practice sentences:
+- Database uses: `text`, `translation`
+- Code looks for: `japanese`/`original`, `english`/`translation`
+
+### Solution
+Update the `VocabularyItem` and `PracticeSentence` interfaces in `useQuizData.ts` to handle both field naming conventions.
 
 ### Changes
 
 ---
 
-**1. Update `src/lib/constants.ts`**
+**File: `src/hooks/useQuizData.ts`**
 
-Add test account credentials:
-
-```typescript
-// Development testing mode - set to true to auto-login with test account
-export const DEV_TEST_MODE = true;
-
-// Test account credentials for auto-login
-export const TEST_ACCOUNT = {
-  email: 'qichaotomwang+1@gmail.com',
-  password: '******', // You'll need to provide the password
-};
-
-// Remove or keep TEST_USER as fallback (optional)
-```
-
----
-
-**2. Update `src/hooks/useAuth.ts`**
-
-Change the test mode logic to perform actual Supabase sign-in:
+1. Update the `VocabularyItem` interface to include `definition` as an alternative:
 
 ```typescript
-useEffect(() => {
-  if (DEV_TEST_MODE) {
-    console.log('🧪 DEV TEST MODE: Auto-logging in with test account');
-    
-    const autoLogin = async () => {
-      // Check if already logged in
-      const { data: { session: existingSession } } = await supabase.auth.getSession();
-      
-      if (existingSession) {
-        // Already logged in, use existing session
-        setSession(existingSession);
-        setUser(existingSession.user);
-        setIsCheckingAuth(false);
-        return;
-      }
-      
-      // Not logged in, sign in with test credentials
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: TEST_ACCOUNT.email,
-        password: TEST_ACCOUNT.password,
-      });
-      
-      if (error) {
-        console.error('Auto-login failed:', error);
-        setIsCheckingAuth(false);
-        return;
-      }
-      
-      setSession(data.session);
-      setUser(data.user);
-      setIsCheckingAuth(false);
-    };
-    
-    autoLogin();
-    return;
-  }
-  
-  // ... rest of normal auth logic
-}, []);
+interface VocabularyItem {
+  word: string;
+  reading?: string;
+  meaning?: string;
+  definition?: string;  // Add this - used by API
+  partOfSpeech?: string;
+}
 ```
 
----
+2. Update the `PracticeSentence` interface to include `text`:
 
-**3. Update `src/pages/Auth.tsx`**
+```typescript
+interface PracticeSentence {
+  japanese?: string;
+  original?: string;
+  text?: string;  // Add this - used by API
+  english?: string;
+  translation?: string;
+  romanization?: string;
+}
+```
 
-Ensure the auth page also auto-redirects when test mode is enabled (already does this, but will work better with real session).
+3. Update the vocabulary processing logic to use either field:
+
+```typescript
+// Line 81 - Handle both "meaning" and "definition"
+const getMeaning = (v: VocabularyItem) => v.meaning || v.definition;
+
+for (let i = 0; i < Math.min(5, shuffledVocab.length); i++) {
+  const vocab = shuffledVocab[i];
+  const meaning = getMeaning(vocab.item);
+  if (!vocab.item.word || !meaning) continue;
+
+  const wrongAnswers = allVocabulary
+    .filter((v) => getMeaning(v.item) !== meaning)
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 3)
+    .map((v) => getMeaning(v.item)!);
+
+  // ... rest of logic using `meaning` variable
+}
+```
+
+4. Update the sentence processing logic:
+
+```typescript
+// Line 109 - Handle "text" in addition to "japanese" and "original"
+const original = sentence.item.japanese || sentence.item.original || sentence.item.text;
+```
+
+5. Update fill-in-blank questions similarly to use `getMeaning` helper.
 
 ---
 
@@ -86,19 +95,12 @@ Ensure the auth page also auto-redirects when test mode is enabled (already does
 
 | File | Change |
 |------|--------|
-| `src/lib/constants.ts` | Add `TEST_ACCOUNT` with email and password |
-| `src/hooks/useAuth.ts` | Change test mode to perform real Supabase sign-in |
+| `src/hooks/useQuizData.ts` | Add `definition` to VocabularyItem interface, add `text` to PracticeSentence interface, update processing logic to handle both naming conventions |
 
-### Security Note
+### Technical Details
 
-The test password will be stored in the code. This is acceptable for development/testing purposes, but make sure:
-- This is a test account only, not used for production
-- Don't commit sensitive passwords to public repositories
+The root cause is a mismatch between two naming conventions used at different times:
+- Older convention: `meaning`, `japanese`, `original`
+- Current API convention: `definition`, `text`, `translation`
 
-### Benefits
-
-- Real authenticated session with valid UUID
-- All database queries work correctly (projects, profiles, etc.)
-- Learning path will load your actual project data
-- Full feature testing with real data
-
+By supporting both, we ensure backward compatibility with any existing data while working with the current API format.
