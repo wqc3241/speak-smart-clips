@@ -248,7 +248,7 @@ export const useVideoProcessing = () => {
                     script: transcript,
                     vocabulary,
                     grammar,
-                    practice_sentences: practiceSentences,
+                    practice_sentences: practiceSentences as unknown as import('@/integrations/supabase/types').Json,
                     detected_language: detectedLanguage,
                     vocabulary_count: vocabulary.length,
                     grammar_count: grammar.length,
@@ -269,7 +269,7 @@ export const useVideoProcessing = () => {
                 description: `"${videoTitle}" is now ready for study.`
             });
 
-            onComplete(completedProject);
+            onComplete(completedProject as AppProject);
         } catch (error) {
             console.error('Failed to complete project processing:', error);
         }
@@ -324,7 +324,7 @@ export const useVideoProcessing = () => {
                     grammar: [],
                     detectedLanguage: selectedLanguageName || 'Unknown',
                     practiceSentences: [],
-                    status: 'pending',
+                    status: 'pending' as const,
                     jobId: result.jobId,
                     userId
                 };
@@ -336,12 +336,12 @@ export const useVideoProcessing = () => {
 
                 // Start background polling
                 if (onProjectUpdate) {
-                    startJobPolling(result.jobId, videoId, pendingProject, onProjectUpdate);
+                    startJobPolling(result.jobId, videoId, pendingProject as AppProject, onProjectUpdate);
                 }
 
                 setIsProcessing(false);
                 setProcessingStep('');
-                return pendingProject;
+                return pendingProject as AppProject;
             }
 
             // Handle completed status (immediate transcript)
@@ -362,7 +362,7 @@ export const useVideoProcessing = () => {
                 console.log('Skipping practice sentence generation - no vocabulary or grammar data');
             }
 
-            const project = {
+            const project: AppProject = {
                 id: Date.now(),
                 title: videoTitle || `Video Lesson - ${videoId}`,
                 url: `https://www.youtube.com/watch?v=${videoId}`,
@@ -371,7 +371,7 @@ export const useVideoProcessing = () => {
                 grammar,
                 detectedLanguage: finalLanguage,
                 practiceSentences,
-                status: 'completed',
+                status: 'completed' as const,
                 userId
             };
 

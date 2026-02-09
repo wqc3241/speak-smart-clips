@@ -58,7 +58,16 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
       
       if (error) throw error;
       
-      setProjects(data || []);
+      setProjects((data || []).map(d => ({
+        ...d,
+        vocabulary: (d.vocabulary ?? []) as unknown as VocabularyItem[],
+        grammar: (d.grammar ?? []) as unknown as GrammarItem[],
+        practice_sentences: (d.practice_sentences ?? []) as unknown as PracticeSentence[],
+        is_favorite: d.is_favorite ?? false,
+        created_at: d.created_at ?? '',
+        last_accessed: d.last_accessed ?? '',
+        updated_at: d.updated_at ?? '',
+      })));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
       console.error('Failed to fetch projects:', error);
