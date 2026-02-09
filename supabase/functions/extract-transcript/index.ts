@@ -3,6 +3,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { CORS_HEADERS, TranscriptResult } from './types.ts';
 
+interface TranscriptSegment {
+  text?: string;
+  content?: string;
+}
+
 async function fetchVideoTitle(videoId: string, supadataApiKey: string): Promise<string> {
   try {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -136,8 +141,8 @@ async function extractWithSupadata(videoId: string, languageCode?: string): Prom
     console.log('=== SUPADATA: Successfully extracted transcript, length:', data.content.length);
     return data.content;
   } else if (data.content && Array.isArray(data.content)) {
-    const transcript = data.content
-      .map((segment: any) => segment.text || segment.content || '')
+    const transcript = (data.content as TranscriptSegment[])
+      .map((segment) => segment.text || segment.content || '')
       .filter((text: string) => text.trim().length > 0)
       .join(' ');
     console.log('=== SUPADATA: Successfully extracted transcript, length:', transcript.length);

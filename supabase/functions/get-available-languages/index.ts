@@ -12,6 +12,12 @@ interface CaptionTrack {
   kind: string;
 }
 
+interface RawCaptionTrack {
+  languageCode: string;
+  name?: { simpleText?: string };
+  kind?: string;
+}
+
 function extractCaptionTracksFromPage(htmlContent: string): CaptionTrack[] {
   try {
     // Look for captionTracks in the ytInitialPlayerResponse
@@ -24,10 +30,10 @@ function extractCaptionTracksFromPage(htmlContent: string): CaptionTrack[] {
     }
     
     const captionTracksJson = match[1];
-    const captionTracks = JSON.parse(captionTracksJson);
+    const captionTracks = JSON.parse(captionTracksJson) as RawCaptionTrack[];
     
     console.log('Found caption tracks:', captionTracks.length);
-    return captionTracks.map((track: any) => ({
+    return captionTracks.map((track) => ({
       languageCode: track.languageCode,
       name: track.name?.simpleText || track.languageCode,
       kind: track.kind || 'standard'

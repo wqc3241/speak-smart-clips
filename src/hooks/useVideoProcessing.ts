@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import type { AppProject, GrammarItem, PracticeSentence, VocabularyItem } from '@/types/project';
 
 export const useVideoProcessing = () => {
     const [isProcessing, setIsProcessing] = useState(false);
@@ -128,7 +129,11 @@ export const useVideoProcessing = () => {
         }
     };
 
-    const generatePracticeSentences = async (vocabulary: any[], grammar: any[], detectedLanguage: string) => {
+    const generatePracticeSentences = async (
+        vocabulary: VocabularyItem[],
+        grammar: GrammarItem[],
+        detectedLanguage: string
+    ): Promise<PracticeSentence[]> => {
         try {
             console.log('Generating practice sentences...');
 
@@ -152,13 +157,18 @@ export const useVideoProcessing = () => {
             }
 
             return [];
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to generate sentences:', error);
             return [];
         }
     };
 
-    const startJobPolling = (jobId: string, videoId: string, initialProject: any, onComplete: (project: any) => void) => {
+    const startJobPolling = (
+        jobId: string,
+        videoId: string,
+        initialProject: AppProject,
+        onComplete: (project: AppProject) => void
+    ) => {
         console.log('Starting background polling for job:', jobId);
         
         const pollInterval = setInterval(async () => {
@@ -186,7 +196,7 @@ export const useVideoProcessing = () => {
                     pollingIntervalsRef.current.delete(jobId);
                     
                     // Update project status to failed
-                    await updateProjectToFailed(jobId, data.error);
+                    await updateProjectToFailed(jobId, data.error, initialProject?.userId);
                     toast({
                         title: "Generation failed",
                         description: data.error,
@@ -202,7 +212,12 @@ export const useVideoProcessing = () => {
         pollingIntervalsRef.current.set(jobId, pollInterval);
     };
 
-    const completeProjectProcessing = async (initialProject: any, transcript: string, videoTitle: string, onComplete: (project: any) => void) => {
+    const completeProjectProcessing = async (
+        initialProject: AppProject,
+        transcript: string,
+        videoTitle: string,
+        onComplete: (project: AppProject) => void
+    ) => {
         try {
             console.log('Completing project processing...');
             
@@ -226,7 +241,7 @@ export const useVideoProcessing = () => {
             };
 
             // Update in database
-            await supabase
+            const { error: updateError } = await supabase
                 .from('projects')
                 .update({
                     title: videoTitle,
@@ -245,6 +260,10 @@ export const useVideoProcessing = () => {
                 .eq('job_id', initialProject.jobId)
                 .eq('user_id', initialProject.userId);
 
+            if (updateError) {
+                throw updateError;
+            }
+
             toast({
                 title: "Video ready!",
                 description: `"${videoTitle}" is now ready for study.`
@@ -256,9 +275,9 @@ export const useVideoProcessing = () => {
         }
     };
 
-    const updateProjectToFailed = async (jobId: string, errorMessage: string) => {
+    const updateProjectToFailed = async (jobId: string, errorMessage: string, userId?: string) => {
         try {
-            await supabase
+            let query = supabase
                 .from('projects')
                 .update({
                     status: 'failed',
@@ -266,12 +285,28 @@ export const useVideoProcessing = () => {
                     updated_at: new Date().toISOString()
                 })
                 .eq('job_id', jobId);
+
+            if (userId) {
+                query = query.eq('user_id', userId);
+            }
+
+            const { error } = await query;
+
+            if (error) {
+                throw error;
+            }
         } catch (error) {
             console.error('Failed to update project status:', error);
         }
     };
 
-    const processVideo = async (videoId: string, languageCode?: string, selectedLanguageName?: string, userId?: string, onProjectUpdate?: (project: any) => void) => {
+    const processVideo = async (
+        videoId: string,
+        languageCode?: string,
+        selectedLanguageName?: string,
+        userId?: string,
+        onProjectUpdate?: (project: AppProject) => void
+    ): Promise<AppProject> => {
         setIsProcessing(true);
         setProcessingStep('Extracting transcript...');
 
@@ -319,7 +354,7 @@ export const useVideoProcessing = () => {
             const finalLanguage = selectedLanguageName || aiDetectedLang;
 
             // Only generate practice sentences if we have vocabulary and grammar
-            let practiceSentences: any[] = [];
+            let practiceSentences: PracticeSentence[] = [];
             if (vocabulary.length > 0 && grammar.length > 0) {
                 setProcessingStep('Generating practice sentences...');
                 practiceSentences = await generatePracticeSentences(vocabulary, grammar, finalLanguage);
@@ -346,9 +381,10 @@ export const useVideoProcessing = () => {
             });
 
             return project;
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Failed to process video";
             // Check for rate limit error
-            if (error.message === 'RATE_LIMIT_EXCEEDED') {
+            if (message === 'RATE_LIMIT_EXCEEDED') {
                 toast({
                     title: "Rate Limit Exceeded",
                     description: "The transcript service is temporarily rate limited. Please wait a few minutes and try again.",
@@ -357,7 +393,7 @@ export const useVideoProcessing = () => {
             } else {
                 toast({
                     title: "Processing failed",
-                    description: error.message || "Failed to process video",
+                    description: message,
                     variant: "destructive",
                 });
             }
@@ -368,12 +404,12 @@ export const useVideoProcessing = () => {
         }
     };
 
-    const cleanup = () => {
+    const cleanup = useCallback(() => {
         pollingIntervalsRef.current.forEach(interval => clearInterval(interval));
         pollingIntervalsRef.current.clear();
-    };
+    }, []);
 
-    const regenerateAnalysis = async (currentProject: any) => {
+    const regenerateAnalysis = async (currentProject: AppProject | null): Promise<AppProject | null> => {
         if (!currentProject) return null;
 
         setIsProcessing(true);
@@ -405,11 +441,12 @@ export const useVideoProcessing = () => {
                 practiceSentences
             };
 
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Could not regenerate analysis";
             console.error('Failed to regenerate analysis:', error);
             toast({
                 title: "Regeneration failed",
-                description: error.message || "Could not regenerate analysis",
+                description: message,
                 variant: "destructive",
             });
             return null;

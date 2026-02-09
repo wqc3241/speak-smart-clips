@@ -1,4 +1,4 @@
- import { useState, useEffect } from 'react';
+ import { useState, useEffect, useCallback } from 'react';
  import { supabase } from '@/integrations/supabase/client';
  import { useAuth } from './useAuth';
  
@@ -38,7 +38,7 @@ const getMeaning = (v: VocabularyItem): string | undefined => v.meaning || v.def
    const [hasProjects, setHasProjects] = useState(false);
    const { user } = useAuth();
  
-   const generateQuestions = async () => {
+  const generateQuestions = useCallback(async () => {
      if (!user) {
        setIsLoading(false);
        return;
@@ -176,11 +176,11 @@ const getMeaning = (v: VocabularyItem): string | undefined => v.meaning || v.def
      } finally {
        setIsLoading(false);
      }
-   };
+  }, [user]);
  
    useEffect(() => {
      generateQuestions();
-   }, [user]);
+  }, [generateQuestions]);
  
    return { questions, isLoading, hasProjects, regenerate: generateQuestions };
  };

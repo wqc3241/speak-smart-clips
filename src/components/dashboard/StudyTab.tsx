@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScriptDisplay } from "@/components/features/video/ScriptDisplay";
 import { VocabularyPanel } from "@/components/features/vocabulary/VocabularyPanel";
-import { BookOpen, Loader2, AlertCircle, Youtube } from 'lucide-react';
+import { BookOpen, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
+import type { AppProject } from "@/types/project";
 
 function extractVideoId(url: string): string | null {
     const patterns = [
@@ -21,10 +22,10 @@ function extractVideoId(url: string): string | null {
 }
 
 interface StudyTabProps {
-    currentProject: any;
+    currentProject: AppProject | null;
     isProcessing: boolean;
     processingStep: string;
-    onUpdateProject: (project: any) => void;
+    onUpdateProject: (project: AppProject) => void;
     onRegenerateAnalysis: () => Promise<void>;
 }
 

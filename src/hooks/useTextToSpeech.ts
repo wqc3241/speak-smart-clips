@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -7,12 +7,17 @@ export const useTextToSpeech = () => {
     const { toast } = useToast();
     const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
     const [currentText, setCurrentText] = useState<string | null>(null);
+    const currentObjectUrlRef = useRef<string | null>(null);
 
     useEffect(() => {
         return () => {
             if (currentAudio) {
                 currentAudio.pause();
                 currentAudio.src = '';
+            }
+            if (currentObjectUrlRef.current) {
+                URL.revokeObjectURL(currentObjectUrlRef.current);
+                currentObjectUrlRef.current = null;
             }
         };
     }, [currentAudio]);
@@ -43,7 +48,11 @@ export const useTextToSpeech = () => {
             }
 
             // Get the Supabase URL from environment
-            const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-speech`;
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+            if (!supabaseUrl) {
+                throw new Error('Missing VITE_SUPABASE_URL');
+            }
+            const functionUrl = `${supabaseUrl}/functions/v1/generate-speech`;
 
             const response = await fetch(functionUrl, {
                 method: 'POST',
@@ -65,18 +74,29 @@ export const useTextToSpeech = () => {
 
             const blob = await response.blob();
             const url = URL.createObjectURL(blob);
+            if (currentObjectUrlRef.current) {
+                URL.revokeObjectURL(currentObjectUrlRef.current);
+            }
+            currentObjectUrlRef.current = url;
             const audio = new Audio(url);
 
             audio.onended = () => {
                 setIsPlaying(false);
                 setCurrentText(null);
                 URL.revokeObjectURL(url);
+                if (currentObjectUrlRef.current === url) {
+                    currentObjectUrlRef.current = null;
+                }
             };
 
             audio.onerror = (e) => {
                 console.error('Audio playback error', e);
                 setIsPlaying(false);
                 setCurrentText(null);
+                URL.revokeObjectURL(url);
+                if (currentObjectUrlRef.current === url) {
+                    currentObjectUrlRef.current = null;
+                }
                 toast({
                     title: "Playback Error",
                     description: "Failed to play the audio.",
@@ -87,11 +107,12 @@ export const useTextToSpeech = () => {
             setCurrentAudio(audio);
             await audio.play();
 
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : "Could not generate audio. Please try again.";
             console.error('TTS Error:', error);
             toast({
                 title: "Error generating speech",
-                description: error.message || "Could not generate audio. Please try again.",
+                description: message,
                 variant: "destructive",
             });
             setIsPlaying(false);

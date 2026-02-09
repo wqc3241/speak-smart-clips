@@ -4,7 +4,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { DEV_TEST_MODE, TEST_ACCOUNT } from '@/lib/constants';
 
 // Global lock for auto-login to prevent multiple concurrent attempts
-let autoLoginLock = {
+const autoLoginLock = {
   inProgress: false,
   failed: false,
   promise: null as Promise<Session | null> | null,

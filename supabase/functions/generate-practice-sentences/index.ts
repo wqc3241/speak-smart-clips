@@ -27,6 +27,10 @@ interface PracticeSentence {
   usedGrammar: string[];
 }
 
+interface GenerateSentencesResult {
+  sentences: PracticeSentence[];
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -173,13 +177,14 @@ Requirements:
       throw new Error('No valid tool call response from AI');
     }
 
-    let result;
+    let result: GenerateSentencesResult;
     try {
       result = JSON.parse(toolCall.function.arguments);
-    } catch (parseError: any) {
-      console.error('JSON parse error:', parseError.message);
+    } catch (parseError: unknown) {
+      const parseMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
+      console.error('JSON parse error:', parseMessage);
       console.error('Failed to parse text:', toolCall.function.arguments);
-      throw new Error(`Failed to parse AI response: ${parseError.message}`);
+      throw new Error(`Failed to parse AI response: ${parseMessage}`);
     }
 
     console.log('Generated sentences:', result.sentences?.length || 0);
@@ -190,11 +195,12 @@ Requirements:
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error in generate-practice-sentences:', error);
     return new Response(
       JSON.stringify({ 
-        error: error.message,
+        error: message,
         sentences: []
       }), 
       {

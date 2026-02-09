@@ -33,7 +33,7 @@
    useEffect(() => {
      // Regenerate questions when starting a new quiz
      regenerate();
-   }, [unitId]);
+  }, [unitId, regenerate]);
  
    const handleAnswer = (answer: string) => {
      if (showResult) return;

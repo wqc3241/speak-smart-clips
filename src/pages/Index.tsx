@@ -13,6 +13,7 @@ import { StudyTab } from "@/components/dashboard/StudyTab";
 import { PracticeInterface } from "@/components/features/practice/PracticeInterface";
 import { ProjectManager } from "@/components/features/project/ProjectManager";
 import { TEST_TRANSCRIPT, TEST_VIDEO_TITLE, TEST_VIDEO_URL } from "@/lib/constants";
+import type { AppProject, PracticeSentence } from "@/types/project";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('input');
@@ -45,7 +46,7 @@ const Index = () => {
     };
   }, [cleanup]);
 
-  const handleProjectCreated = (project: any) => {
+  const handleProjectCreated = (project: AppProject) => {
     setCurrentProject(project);
     setActiveTab('lesson');
   };
@@ -94,12 +95,13 @@ const Index = () => {
         description: `Your lesson is ready for study. Language: ${detectedLanguage}`,
       });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not load test data";
       console.error('Test data loading error:', error);
       setProcessingStep('');
       toast({
         title: "Loading failed",
-        description: error.message || "Could not load test data",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -110,9 +112,9 @@ const Index = () => {
   const handleProcessVideo = async (videoId: string, languageCode?: string, selectedLanguageName?: string) => {
     const project = await processVideo(videoId, languageCode, selectedLanguageName, user?.id, (updatedProject) => {
       // This callback is called when a pending project completes
-      if (currentProject?.jobId === updatedProject.jobId) {
-        setCurrentProject(updatedProject);
-      }
+      setCurrentProject((prev) =>
+        prev?.jobId === updatedProject.jobId ? updatedProject : prev
+      );
     });
     if (project) {
       handleProjectCreated(project);
@@ -128,7 +130,7 @@ const Index = () => {
     }
   };
 
-  const loadProject = (project: any) => {
+  const loadProject = (project: AppProject) => {
     setCurrentProject(project);
     setActiveTab('lesson');
     toast({
@@ -155,71 +157,98 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-6 md:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          {/* Desktop Tab Navigation */}
-          <TabsList className="hidden md:grid w-full grid-cols-4 mb-6 bg-muted">
-            <TabsTrigger value="input" className="gap-2">
-              <Youtube className="w-4 h-4" />
-              <span>Input</span>
-            </TabsTrigger>
-            <TabsTrigger value="lesson" className="gap-2">
-              <BookOpen className="w-4 h-4" />
-              <span>Study</span>
-            </TabsTrigger>
-            <TabsTrigger value="conversation" className="gap-2">
-              <MessageCircle className="w-4 h-4" />
-              <span>Practice</span>
-            </TabsTrigger>
-            <TabsTrigger value="projects" className="gap-2">
-              <History className="w-4 h-4" />
-              <span>Projects</span>
-            </TabsTrigger>
-          </TabsList>
+          <div className="md:grid md:grid-cols-[240px_minmax(0,1fr)] md:gap-6 lg:gap-8">
+            <aside className="hidden md:block">
+              <div className="sticky top-24 space-y-4">
+                <TabsList className="grid h-auto grid-cols-1 gap-1 bg-muted/70 p-1">
+                  <TabsTrigger value="input" className="justify-start gap-2">
+                    <Youtube className="w-4 h-4" />
+                    <span>Input</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="lesson" className="justify-start gap-2">
+                    <BookOpen className="w-4 h-4" />
+                    <span>Study</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="conversation" className="justify-start gap-2">
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Practice</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="projects" className="justify-start gap-2">
+                    <History className="w-4 h-4" />
+                    <span>Projects</span>
+                  </TabsTrigger>
+                </TabsList>
 
-          <TabsContent value="input">
-            <InputTab
-              isProcessing={isProcessing}
-              processingStep={processingStep}
-              onProcessVideo={handleProcessVideo}
-              onUseTestData={handleUseTestData}
-            />
-          </TabsContent>
+                <Card className="border-dashed">
+                  <CardContent className="p-4 space-y-2">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Current lesson</p>
+                    <p className="text-sm font-medium line-clamp-2">
+                      {currentProject?.title || "No lesson selected"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {currentProject?.status === 'pending'
+                        ? 'Transcript generation in progress'
+                        : currentProject?.status === 'failed'
+                          ? 'Last generation failed'
+                          : currentProject
+                            ? 'Ready to study and practice'
+                            : 'Add a video from Input tab to start'}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </aside>
 
-          <TabsContent value="lesson">
-            <StudyTab
-              currentProject={currentProject}
-              isProcessing={isProcessing}
-              processingStep={processingStep}
-              onUpdateProject={setCurrentProject}
-              onRegenerateAnalysis={handleRegenerateAnalysis}
-            />
-          </TabsContent>
+            <div className="min-w-0">
+              <TabsContent value="input" className="mt-0">
+                <InputTab
+                  isProcessing={isProcessing}
+                  processingStep={processingStep}
+                  onProcessVideo={handleProcessVideo}
+                  onUseTestData={handleUseTestData}
+                />
+              </TabsContent>
 
-          <TabsContent value="conversation" className="space-y-4 md:space-y-6">
-            {currentProject ? (
-              <PracticeInterface
-                project={currentProject}
-                onSentencesUpdate={(sentences) => {
-                  setCurrentProject((prev: any) => prev ? { ...prev, practiceSentences: sentences } : null);
-                }}
-              />
-            ) : (
-              <Card className="text-center py-16 border-none shadow-none">
-                <CardContent>
-                  <MessageCircle className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold text-muted-foreground mb-2">
-                    No lesson to practice
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Complete a lesson first
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
+              <TabsContent value="lesson" className="mt-0">
+                <StudyTab
+                  currentProject={currentProject}
+                  isProcessing={isProcessing}
+                  processingStep={processingStep}
+                  onUpdateProject={setCurrentProject}
+                  onRegenerateAnalysis={handleRegenerateAnalysis}
+                />
+              </TabsContent>
 
-          <TabsContent value="projects" className="space-y-4 md:space-y-6">
-            <ProjectManager onLoadProject={loadProject} />
-          </TabsContent>
+              <TabsContent value="conversation" className="mt-0 space-y-4 md:space-y-6">
+                {currentProject ? (
+                  <PracticeInterface
+                    project={currentProject}
+                    onSentencesUpdate={(sentences) => {
+                      setCurrentProject((prev: AppProject | null) =>
+                        prev ? { ...prev, practiceSentences: sentences as PracticeSentence[] } : null
+                      );
+                    }}
+                  />
+                ) : (
+                  <Card className="text-center py-16 border-none shadow-none">
+                    <CardContent>
+                      <MessageCircle className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                      <h3 className="text-lg font-semibold text-muted-foreground mb-2">
+                        No lesson to practice
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Complete a lesson first
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+
+              <TabsContent value="projects" className="mt-0 space-y-4 md:space-y-6">
+                <ProjectManager onLoadProject={loadProject} />
+              </TabsContent>
+            </div>
+          </div>
         </Tabs>
       </main>
 

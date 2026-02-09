@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,15 +7,16 @@ import { Input } from "@/components/ui/input";
 import { History, Search, Star, Trash2, Eye, Loader2 } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import type { AppProject, GrammarItem, PracticeSentence, VocabularyItem } from "@/types/project";
 
 interface Project {
   id: string;
   title: string;
   youtube_url: string;
   script: string;
-  vocabulary: any;
-  grammar: any;
-  practice_sentences: any;
+  vocabulary: VocabularyItem[] | null;
+  grammar: GrammarItem[] | null;
+  practice_sentences: PracticeSentence[] | null;
   detected_language: string | null;
   vocabulary_count: number | null;
   grammar_count: number | null;
@@ -26,7 +27,7 @@ interface Project {
 }
 
 interface ProjectManagerProps {
-  onLoadProject?: (project: any) => void;
+  onLoadProject?: (project: AppProject) => void;
 }
 
 export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject }) => {
@@ -34,32 +35,46 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
+  const getCurrentUserId = async () => {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    return data.user?.id ?? null;
+  };
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     setIsLoading(true);
     try {
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        setProjects([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('projects')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
       
       setProjects(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
       console.error('Failed to fetch projects:', error);
       toast({
         title: "Failed to load projects",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
 
   const filteredProjects = projects.filter(project =>
     project.title.toLowerCase().includes(searchTerm.toLowerCase())
@@ -69,10 +84,17 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
     const project = projects.find(p => p.id === id);
     if (!project) return;
     
-    const { error } = await supabase
+    const userId = await getCurrentUserId();
+    let updateQuery = supabase
       .from('projects')
       .update({ is_favorite: !project.is_favorite })
       .eq('id', id);
+
+    if (userId) {
+      updateQuery = updateQuery.eq('user_id', userId);
+    }
+
+    const { error } = await updateQuery;
     
     if (error) {
       toast({
@@ -90,10 +112,17 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
     const confirmDelete = confirm('Are you sure you want to delete this project?');
     if (!confirmDelete) return;
     
-    const { error } = await supabase
+    const userId = await getCurrentUserId();
+    let deleteQuery = supabase
       .from('projects')
       .delete()
       .eq('id', id);
+
+    if (userId) {
+      deleteQuery = deleteQuery.eq('user_id', userId);
+    }
+
+    const { error } = await deleteQuery;
     
     if (error) {
       toast({
@@ -113,10 +142,22 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
     if (!project || !onLoadProject) return;
     
     // Update last_accessed timestamp
-    await supabase
+    let userId: string | null = null;
+    try {
+      userId = await getCurrentUserId();
+    } catch (error) {
+      console.error('Failed to load user for project update:', error);
+    }
+    let updateQuery = supabase
       .from('projects')
       .update({ last_accessed: new Date().toISOString() })
       .eq('id', id);
+
+    if (userId) {
+      updateQuery = updateQuery.eq('user_id', userId);
+    }
+
+    await updateQuery;
     
     // Transform database format to app format
     const loadedProject = {
@@ -124,10 +165,10 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
       title: project.title,
       url: project.youtube_url,
       script: project.script,
-      vocabulary: project.vocabulary,
-      grammar: project.grammar,
-      practiceSentences: project.practice_sentences,
-      detectedLanguage: project.detected_language,
+      vocabulary: project.vocabulary || [],
+      grammar: project.grammar || [],
+      practiceSentences: project.practice_sentences || [],
+      detectedLanguage: project.detected_language || 'Unknown',
     };
     
     onLoadProject(loadedProject);

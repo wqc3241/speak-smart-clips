@@ -10,17 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
-
-interface PracticeSentence {
-  text: string;
-  translation: string;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
-  usedVocabulary: string[];
-  usedGrammar: string[];
-}
+import type { AppProject, GrammarItem, PracticeSentence, VocabularyItem } from "@/types/project";
 
 interface PracticeInterfaceProps {
-  project: any;
+  project: AppProject;
   onSentencesUpdate?: (sentences: PracticeSentence[]) => void;
 }
 
@@ -36,12 +29,25 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
     
     try {
       console.log('Generating practice sentences...');
+
+      const vocabulary = project?.vocabulary ?? [];
+      const grammar = project?.grammar ?? [];
+      const detectedLanguage = project?.detectedLanguage ?? 'Unknown';
+
+      if (vocabulary.length === 0 || grammar.length === 0) {
+        toast({
+          title: "Not enough data",
+          description: "Generate vocabulary and grammar first, then try again.",
+          variant: "destructive",
+        });
+        return;
+      }
       
       const { data, error } = await supabase.functions.invoke('generate-practice-sentences', {
         body: {
-          vocabulary: project.vocabulary,
-          grammar: project.grammar,
-          detectedLanguage: project.detectedLanguage,
+          vocabulary,
+          grammar,
+          detectedLanguage,
           count: 10
         }
       });
@@ -65,11 +71,12 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
           variant: "destructive",
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not generate practice sentences";
       console.error('Failed to generate sentences:', error);
       toast({
         title: "Generation failed",
-        description: error.message || "Could not generate practice sentences",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -249,7 +256,7 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
             <ScrollArea className="h-[600px] pr-4">
               <div className="space-y-3 mb-4">
                 <h4 className="text-sm font-semibold text-muted-foreground">Vocabulary</h4>
-                {project.vocabulary?.map((item: any, index: number) => (
+                {project.vocabulary?.map((item: VocabularyItem, index: number) => (
                   <div key={index} className="text-sm p-2 bg-muted/30 rounded">
                     <span className="font-medium text-foreground">{item.word}</span>
                     <p className="text-xs text-muted-foreground mt-0.5">{item.definition}</p>
@@ -264,7 +271,7 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
 
               <div className="space-y-3">
                 <h4 className="text-sm font-semibold text-muted-foreground">Grammar</h4>
-                {project.grammar?.map((item: any, index: number) => (
+                {project.grammar?.map((item: GrammarItem, index: number) => (
                   <div key={index} className="text-sm p-2 bg-muted/30 rounded">
                     <span className="font-medium text-foreground">{item.rule}</span>
                     <p className="text-xs text-muted-foreground mt-1">{item.explanation}</p>
@@ -298,7 +305,7 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
                     <BookOpen className="w-4 h-4" />
                     Vocabulary ({project.vocabulary?.length || 0})
                   </h3>
-                  {project.vocabulary?.map((item: any, index: number) => (
+                  {project.vocabulary?.map((item: VocabularyItem, index: number) => (
                     <div key={index} className="mb-3 p-3 bg-muted/50 rounded-lg">
                       <div className="font-medium text-base">{item.word}</div>
                       <div className="text-sm text-muted-foreground mt-1">{item.definition}</div>
@@ -317,7 +324,7 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
                     <GraduationCap className="w-4 h-4" />
                     Grammar ({project.grammar?.length || 0})
                   </h3>
-                  {project.grammar?.map((item: any, index: number) => (
+                  {project.grammar?.map((item: GrammarItem, index: number) => (
                     <div key={index} className="mb-3 p-3 bg-muted/50 rounded-lg">
                       <div className="font-medium text-base mb-1">{item.rule}</div>
                       <div className="text-xs text-muted-foreground mb-2">{item.explanation}</div>

@@ -6,9 +6,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { MessageCircle, Mic, MicOff, Send, Volume2 } from 'lucide-react';
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
+import type { AppProject, VocabularyItem } from "@/types/project";
 
 interface ConversationInterfaceProps {
-  project: any;
+  project: AppProject;
 }
 
 interface Message {
@@ -26,7 +27,7 @@ export const ConversationInterface: React.FC<ConversationInterfaceProps> = ({ pr
       sender: 'ai',
       text: `Hi! Let's practice using vocabulary from your lesson. Try using words like "${project.vocabulary[0]?.word}" or "${project.vocabulary[1]?.word}"!`,
       timestamp: new Date(),
-      suggestedWords: project.vocabulary.slice(0, 3).map((v: any) => v.word)
+      suggestedWords: project.vocabulary.slice(0, 3).map((v: VocabularyItem) => v.word)
     }
   ]);
   const [currentMessage, setCurrentMessage] = useState('');
@@ -53,7 +54,7 @@ export const ConversationInterface: React.FC<ConversationInterfaceProps> = ({ pr
         sender: 'ai',
         text: `Great! I noticed you used some key words. Let's continue practicing. Can you tell me more?`,
         timestamp: new Date(),
-        suggestedWords: project.vocabulary.slice(2, 5).map((v: any) => v.word)
+        suggestedWords: project.vocabulary.slice(2, 5).map((v: VocabularyItem) => v.word)
       };
       setMessages(prev => [...prev, aiResponse]);
     }, 1500);
