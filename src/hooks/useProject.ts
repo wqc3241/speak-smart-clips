@@ -31,9 +31,9 @@ export const useProject = (user: User | null) => {
                     .update({
                         title: projectToSave.title,
                         script: projectToSave.script || '',
-                        vocabulary: projectToSave.vocabulary || [],
-                        grammar: projectToSave.grammar || [],
-                        practice_sentences: projectToSave.practiceSentences || [],
+                    vocabulary: (projectToSave.vocabulary || []) as unknown as import('@/integrations/supabase/types').Json,
+                    grammar: (projectToSave.grammar || []) as unknown as import('@/integrations/supabase/types').Json,
+                    practice_sentences: (projectToSave.practiceSentences || []) as unknown as import('@/integrations/supabase/types').Json,
                         detected_language: projectToSave.detectedLanguage,
                         status: projectToSave.status || 'completed',
                         job_id: projectToSave.jobId,
@@ -47,21 +47,21 @@ export const useProject = (user: User | null) => {
             } else {
                 // Insert new project
                 const { error: insertError } = await supabase
-                    .from('projects')
-                    .insert({
-                        youtube_url: projectToSave.url,
-                        title: projectToSave.title,
-                        script: projectToSave.script || '',
-                        vocabulary: projectToSave.vocabulary || [],
-                        grammar: projectToSave.grammar || [],
-                        practice_sentences: projectToSave.practiceSentences || [],
-                        detected_language: projectToSave.detectedLanguage,
-                        status: projectToSave.status || 'completed',
-                        job_id: projectToSave.jobId,
-                        error_message: projectToSave.errorMessage,
-                        is_favorite: false,
-                        user_id: user.id,
-                    });
+                .from('projects')
+                .insert([{
+                    youtube_url: projectToSave.url,
+                    title: projectToSave.title,
+                    script: projectToSave.script || '',
+                    vocabulary: (projectToSave.vocabulary || []) as unknown as import('@/integrations/supabase/types').Json,
+                    grammar: (projectToSave.grammar || []) as unknown as import('@/integrations/supabase/types').Json,
+                    practice_sentences: (projectToSave.practiceSentences || []) as unknown as import('@/integrations/supabase/types').Json,
+                    detected_language: projectToSave.detectedLanguage,
+                    status: projectToSave.status || 'completed',
+                    job_id: projectToSave.jobId,
+                    error_message: projectToSave.errorMessage,
+                    is_favorite: false,
+                    user_id: user.id,
+                }]);
 
                 if (insertError) throw insertError;
             }

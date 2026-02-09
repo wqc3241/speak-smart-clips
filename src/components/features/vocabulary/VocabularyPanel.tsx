@@ -11,8 +11,9 @@ import { Loader2 } from "lucide-react";
 
 interface VocabularyItem {
   word: string;
-  definition: string;
-  difficulty: "beginner" | "intermediate" | "advanced";
+  definition?: string;
+  meaning?: string;
+  difficulty?: "beginner" | "intermediate" | "advanced" | string;
 }
 
 interface GrammarItem {
