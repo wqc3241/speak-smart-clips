@@ -32,7 +32,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
         />
                     <div>
                         <h1 className="text-2xl font-bold text-foreground">
-                            Speak Smart Clips
+                            BreakLingo
                         </h1>
                         <p className="text-sm text-muted-foreground">
                             Learn languages from YouTube videos
@@ -81,7 +81,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
           alt="App Avatar"
           className="w-10 h-10 object-contain rounded-full"
         />
-                    <h1 className="text-lg font-bold text-foreground">Speak Smart Clips</h1>
+                    <h1 className="text-lg font-bold text-foreground">BreakLingo</h1>
                     </div>
                     
                     {user && (
