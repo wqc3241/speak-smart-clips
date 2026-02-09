@@ -6,6 +6,7 @@ import { DEV_TEST_MODE, TEST_ACCOUNT } from '@/lib/constants';
 // Global lock for auto-login to prevent multiple concurrent attempts
 let autoLoginLock = {
   inProgress: false,
+  failed: false,
   promise: null as Promise<Session | null> | null,
 };
 
@@ -35,6 +36,14 @@ export const useAuth = () => {
     if (DEV_TEST_MODE) {
       const autoLogin = async () => {
         try {
+          // If auto-login already failed, don't retry - just finish checking
+          if (autoLoginLock.failed) {
+            console.log('🧪 DEV TEST MODE: Auto-login previously failed, skipping.');
+            authCheckComplete = true;
+            if (mounted) setIsCheckingAuth(false);
+            return;
+          }
+
           // First, check if we should be the one to do the login (synchronous check)
           if (autoLoginLock.inProgress && autoLoginLock.promise) {
             // Another hook instance is already handling login
@@ -45,7 +54,7 @@ export const useAuth = () => {
               setSession(resultSession);
               setUser(resultSession.user);
             }
-            setIsCheckingAuth(false);
+            if (mounted) setIsCheckingAuth(false);
             return;
           }
           
@@ -84,6 +93,7 @@ export const useAuth = () => {
             if (error) {
               console.error('🧪 DEV TEST MODE: Auto-login failed:', error);
               autoLoginLock.inProgress = false;
+              autoLoginLock.failed = true;
               return null;
             }
             

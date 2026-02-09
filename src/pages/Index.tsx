@@ -21,7 +21,7 @@ const Index = () => {
 
   useEffect(() => {
     if (!isCheckingAuth && !user) {
-      navigate("/auth");
+      navigate("/auth", { replace: true });
     }
   }, [isCheckingAuth, user, navigate]);
   const {
