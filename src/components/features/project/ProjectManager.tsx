@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { History, Search, Star, Trash2, Eye, Loader2 } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import type { AppProject, GrammarItem, PracticeSentence, VocabularyItem } from "@/types/project";
+import { isVocabularyArray, isGrammarArray, isPracticeSentenceArray } from "@/lib/typeGuards";
 
 interface Project {
   id: string;
@@ -34,11 +35,23 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
   const [searchTerm, setSearchTerm] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const userIdRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const getCurrentUserId = async () => {
+    if (userIdRef.current) return userIdRef.current;
     const { data, error } = await supabase.auth.getUser();
     if (error) throw error;
-    return data.user?.id ?? null;
+    const userId = data.user?.id ?? null;
+    userIdRef.current = userId;
+    return userId;
   };
 
   const fetchProjects = useCallback(async () => {
@@ -46,7 +59,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
     try {
       const userId = await getCurrentUserId();
       if (!userId) {
-        setProjects([]);
+        if (mountedRef.current) setProjects([]);
         return;
       }
 
@@ -55,19 +68,27 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
-      
+
       if (error) throw error;
-      
-      setProjects((data || []).map(d => ({
-        ...d,
-        vocabulary: (d.vocabulary ?? []) as unknown as VocabularyItem[],
-        grammar: (d.grammar ?? []) as unknown as GrammarItem[],
-        practice_sentences: (d.practice_sentences ?? []) as unknown as PracticeSentence[],
-        is_favorite: d.is_favorite ?? false,
-        created_at: d.created_at ?? '',
-        last_accessed: d.last_accessed ?? '',
-        updated_at: d.updated_at ?? '',
-      })));
+
+      if (mountedRef.current) {
+        setProjects((data || []).map(d => {
+          const rawVocab = d.vocabulary ?? [];
+          const rawGrammar = d.grammar ?? [];
+          const rawSentences = d.practice_sentences ?? [];
+
+          return {
+            ...d,
+            vocabulary: isVocabularyArray(rawVocab) ? rawVocab : [],
+            grammar: isGrammarArray(rawGrammar) ? rawGrammar : [],
+            practice_sentences: isPracticeSentenceArray(rawSentences) ? rawSentences : [],
+            is_favorite: d.is_favorite ?? false,
+            created_at: d.created_at ?? '',
+            last_accessed: d.last_accessed ?? '',
+            updated_at: d.updated_at ?? '',
+          };
+        }));
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
       console.error('Failed to fetch projects:', error);
@@ -77,7 +98,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   }, []);
 
@@ -92,26 +113,23 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
   const toggleFavorite = async (id: string) => {
     const project = projects.find(p => p.id === id);
     if (!project) return;
-    
+
     const userId = await getCurrentUserId();
-    let updateQuery = supabase
+    if (!userId) return;
+
+    const { error } = await supabase
       .from('projects')
       .update({ is_favorite: !project.is_favorite })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
 
-    if (userId) {
-      updateQuery = updateQuery.eq('user_id', userId);
-    }
-
-    const { error } = await updateQuery;
-    
     if (error) {
       toast({
         title: "Failed to update favorite",
         variant: "destructive",
       });
     } else {
-      setProjects(projects.map(p => 
+      setProjects(projects.map(p =>
         p.id === id ? { ...p, is_favorite: !p.is_favorite } : p
       ));
     }
@@ -120,19 +138,16 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
   const deleteProject = async (id: string) => {
     const confirmDelete = confirm('Are you sure you want to delete this project?');
     if (!confirmDelete) return;
-    
+
     const userId = await getCurrentUserId();
-    let deleteQuery = supabase
+    if (!userId) return;
+
+    const { error } = await supabase
       .from('projects')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
 
-    if (userId) {
-      deleteQuery = deleteQuery.eq('user_id', userId);
-    }
-
-    const { error } = await deleteQuery;
-    
     if (error) {
       toast({
         title: "Failed to delete project",
@@ -140,7 +155,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
       });
     } else {
       setProjects(projects.filter(p => p.id !== id));
-      toast({ 
+      toast({
         title: "Project deleted",
       });
     }
@@ -149,7 +164,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
   const loadProject = async (id: string) => {
     const project = projects.find(p => p.id === id);
     if (!project || !onLoadProject) return;
-    
+
     // Update last_accessed timestamp
     let userId: string | null = null;
     try {
@@ -167,7 +182,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
     }
 
     await updateQuery;
-    
+
     // Transform database format to app format
     const loadedProject = {
       id: project.id,
@@ -179,7 +194,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
       practiceSentences: project.practice_sentences || [],
       detectedLanguage: project.detected_language || 'Unknown',
     };
-    
+
     onLoadProject(loadedProject);
   };
 
@@ -192,7 +207,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
-    
+
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'

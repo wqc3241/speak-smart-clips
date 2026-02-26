@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { LogOut, User as UserIcon, ChevronDown } from 'lucide-react';
+import { LogOut, MessageSquarePlus, ChevronDown } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { AVATAR_URL } from "@/lib/constants";
 import {
@@ -12,6 +12,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { FeedbackDialog } from "@/components/features/feedback/FeedbackDialog";
 
 interface HeaderProps {
     user: User | null;
@@ -19,6 +20,8 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
+    const [feedbackOpen, setFeedbackOpen] = useState(false);
+
     return (
         <>
             {/* Header - Desktop only */}
@@ -39,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
                         </p>
                     </div>
                     </div>
-                    
+
                     {user && (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -62,6 +65,11 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
                                     </div>
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setFeedbackOpen(true)} className="cursor-pointer">
+                                    <MessageSquarePlus className="mr-2 h-4 w-4" />
+                                    <span>Submit Feedback</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={onLogout} className="cursor-pointer">
                                     <LogOut className="mr-2 h-4 w-4" />
                                     <span>Log out</span>
@@ -83,7 +91,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
         />
                     <h1 className="text-lg font-bold text-foreground">BreakLingo</h1>
                     </div>
-                    
+
                     {user && (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -105,6 +113,11 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
                                     </div>
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setFeedbackOpen(true)} className="cursor-pointer">
+                                    <MessageSquarePlus className="mr-2 h-4 w-4" />
+                                    <span>Submit Feedback</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={onLogout} className="cursor-pointer">
                                     <LogOut className="mr-2 h-4 w-4" />
                                     <span>Log out</span>
@@ -114,6 +127,9 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
                     )}
                 </div>
             </header>
+
+            {/* Feedback Dialog */}
+            <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
         </>
     );
 };

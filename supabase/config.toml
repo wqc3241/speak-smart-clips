@@ -12,6 +12,16 @@ project_id = "evmamwdmwogmlezndueg"
 
 [functions.get-available-languages]
 
+[functions.youtube-search]
+
+[functions.conversation-chat]
+
+[functions.conversation-summary]
+
+[functions.send-welcome-email]
+
+[functions.submit-feedback]
+
 [functions.test-apis]
  
  [functions.migrate-project-titles]

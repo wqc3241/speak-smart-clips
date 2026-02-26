@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { AppProject, GrammarItem, PracticeSentence, VocabularyItem } from '@/types/project';
@@ -8,6 +8,20 @@ export const useVideoProcessing = () => {
     const [processingStep, setProcessingStep] = useState<string>('');
     const { toast } = useToast();
     const pollingIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+    const mountedRef = useRef(true);
+
+    const cleanup = useCallback(() => {
+        pollingIntervalsRef.current.forEach(interval => clearInterval(interval));
+        pollingIntervalsRef.current.clear();
+    }, []);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            cleanup();
+        };
+    }, [cleanup]);
 
     const extractVideoId = (url: string) => {
         const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/);
@@ -16,13 +30,11 @@ export const useVideoProcessing = () => {
 
     const fetchAvailableLanguages = async (videoId: string) => {
         try {
-            console.log('Fetching available languages for:', videoId);
             const { data, error } = await supabase.functions.invoke('get-available-languages', {
                 body: { videoId }
             });
 
             if (error || !data?.success) {
-                console.warn('Could not fetch languages, proceeding with auto-detection');
                 return null;
             }
 
@@ -35,14 +47,12 @@ export const useVideoProcessing = () => {
 
     const fetchTranscript = async (videoId: string, languageCode?: string) => {
         try {
-            console.log('Trying extract-transcript edge function for:', videoId, 'language:', languageCode || 'auto');
             const { data, error } = await supabase.functions.invoke('extract-transcript', {
                 body: { videoId, languageCode }
             });
 
             // Check for pending status (202 with jobId)
             if (data?.status === 'pending' && data?.jobId) {
-                console.log('✓ Transcript generation started, jobId:', data.jobId);
                 return {
                     status: 'pending',
                     jobId: data.jobId,
@@ -56,7 +66,6 @@ export const useVideoProcessing = () => {
             }
 
             if (!error && data?.success && data.transcript) {
-                console.log('✓ Successfully extracted transcript via extract-transcript');
                 return {
                     status: 'completed',
                     transcript: data.transcript,
@@ -69,14 +78,15 @@ export const useVideoProcessing = () => {
             if (data?.error && data.error.includes('more than 50 words')) {
                 throw new Error(data.error);
             }
-
-            console.warn('extract-transcript failed or returned no transcript:', data?.error);
         } catch (err) {
             // Re-throw rate limit errors to be handled by processVideo
             if (err instanceof Error && err.message === 'RATE_LIMIT_EXCEEDED') {
                 throw err;
             }
-            console.warn('extract-transcript edge function failed:', err);
+            // Re-throw transcript too short errors
+            if (err instanceof Error && err.message.includes('more than 50 words')) {
+                throw err;
+            }
         }
 
         console.error('Transcript extraction failed for video:', videoId);
@@ -85,8 +95,6 @@ export const useVideoProcessing = () => {
 
     const analyzeContentWithAI = async (script: string) => {
         try {
-            console.log('Analyzing content with AI...');
-
             const { data, error } = await supabase.functions.invoke('analyze-content', {
                 body: { transcript: script }
             });
@@ -98,15 +106,12 @@ export const useVideoProcessing = () => {
 
             // Check for rate limit or credit errors in the response
             if (data.error) {
-                console.warn('AI analysis returned error:', data.error);
                 toast({
                     title: "AI Analysis Issue",
                     description: data.error,
                     variant: "destructive"
                 });
             }
-
-            console.log('AI analysis result:', data);
 
             return {
                 vocabulary: data.vocabulary || [],
@@ -120,7 +125,6 @@ export const useVideoProcessing = () => {
                 description: "Could not analyze content. Please try again.",
                 variant: "destructive"
             });
-            // Return empty arrays if AI analysis fails
             return {
                 vocabulary: [],
                 grammar: [],
@@ -135,8 +139,6 @@ export const useVideoProcessing = () => {
         detectedLanguage: string
     ): Promise<PracticeSentence[]> => {
         try {
-            console.log('Generating practice sentences...');
-
             const { data, error } = await supabase.functions.invoke('generate-practice-sentences', {
                 body: {
                     vocabulary,
@@ -152,7 +154,6 @@ export const useVideoProcessing = () => {
             }
 
             if (data?.sentences && data.sentences.length > 0) {
-                console.log('Generated practice sentences:', data.sentences.length);
                 return data.sentences;
             }
 
@@ -169,11 +170,9 @@ export const useVideoProcessing = () => {
         initialProject: AppProject,
         onComplete: (project: AppProject) => void
     ) => {
-        console.log('Starting background polling for job:', jobId);
-        
         const pollInterval = setInterval(async () => {
+            if (!mountedRef.current) return;
             try {
-                console.log('Polling job:', jobId);
                 const { data, error } = await supabase.functions.invoke('poll-transcript-job', {
                     body: { jobId, videoId }
                 });
@@ -183,27 +182,28 @@ export const useVideoProcessing = () => {
                     return;
                 }
 
+                if (!mountedRef.current) return;
+
                 if (data.status === 'completed') {
-                    console.log('Job completed:', jobId);
                     clearInterval(pollInterval);
                     pollingIntervalsRef.current.delete(jobId);
-                    
+
                     // Complete the processing
                     await completeProjectProcessing(initialProject, data.transcript, data.videoTitle, onComplete);
                 } else if (data.status === 'failed') {
-                    console.log('Job failed:', jobId, data.error);
                     clearInterval(pollInterval);
                     pollingIntervalsRef.current.delete(jobId);
-                    
+
                     // Update project status to failed
                     await updateProjectToFailed(jobId, data.error, initialProject?.userId);
-                    toast({
-                        title: "Generation failed",
-                        description: data.error,
-                        variant: "destructive"
-                    });
+                    if (mountedRef.current) {
+                        toast({
+                            title: "Generation failed",
+                            description: data.error,
+                            variant: "destructive"
+                        });
+                    }
                 }
-                // If still pending/processing, continue polling
             } catch (error) {
                 console.error('Polling error:', error);
             }
@@ -219,14 +219,12 @@ export const useVideoProcessing = () => {
         onComplete: (project: AppProject) => void
     ) => {
         try {
-            console.log('Completing project processing...');
-            
             // Analyze content
             const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(transcript);
-            
+
             // Generate practice sentences
             const practiceSentences = await generatePracticeSentences(vocabulary, grammar, detectedLanguage);
-            
+
             const completedProject = {
                 ...initialProject,
                 title: videoTitle,
@@ -264,12 +262,14 @@ export const useVideoProcessing = () => {
                 throw updateError;
             }
 
-            toast({
-                title: "Video ready!",
-                description: `"${videoTitle}" is now ready for study.`
-            });
+            if (mountedRef.current) {
+                toast({
+                    title: "Video ready!",
+                    description: `"${videoTitle}" is now ready for study.`
+                });
 
-            onComplete(completedProject as AppProject);
+                onComplete(completedProject as AppProject);
+            }
         } catch (error) {
             console.error('Failed to complete project processing:', error);
         }
@@ -307,8 +307,10 @@ export const useVideoProcessing = () => {
         userId?: string,
         onProjectUpdate?: (project: AppProject) => void
     ): Promise<AppProject> => {
-        setIsProcessing(true);
-        setProcessingStep('Extracting transcript...');
+        if (mountedRef.current) {
+            setIsProcessing(true);
+            setProcessingStep('Extracting transcript...');
+        }
 
         try {
             const result = await fetchTranscript(videoId, languageCode);
@@ -339,15 +341,19 @@ export const useVideoProcessing = () => {
                     startJobPolling(result.jobId, videoId, pendingProject as AppProject, onProjectUpdate);
                 }
 
-                setIsProcessing(false);
-                setProcessingStep('');
+                if (mountedRef.current) {
+                    setIsProcessing(false);
+                    setProcessingStep('');
+                }
                 return pendingProject as AppProject;
             }
 
             // Handle completed status (immediate transcript)
             const { transcript, videoTitle } = result;
 
-            setProcessingStep('Analyzing content with AI...');
+            if (mountedRef.current) {
+                setProcessingStep('Analyzing content with AI...');
+            }
             const { vocabulary, grammar, detectedLanguage: aiDetectedLang } = await analyzeContentWithAI(transcript);
 
             // Use selected language if available, otherwise use AI detected language
@@ -356,10 +362,10 @@ export const useVideoProcessing = () => {
             // Only generate practice sentences if we have vocabulary and grammar
             let practiceSentences: PracticeSentence[] = [];
             if (vocabulary.length > 0 && grammar.length > 0) {
-                setProcessingStep('Generating practice sentences...');
+                if (mountedRef.current) {
+                    setProcessingStep('Generating practice sentences...');
+                }
                 practiceSentences = await generatePracticeSentences(vocabulary, grammar, finalLanguage);
-            } else {
-                console.log('Skipping practice sentence generation - no vocabulary or grammar data');
             }
 
             const project: AppProject = {
@@ -383,7 +389,6 @@ export const useVideoProcessing = () => {
             return project;
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Failed to process video";
-            // Check for rate limit error
             if (message === 'RATE_LIMIT_EXCEEDED') {
                 toast({
                     title: "Rate Limit Exceeded",
@@ -399,34 +404,33 @@ export const useVideoProcessing = () => {
             }
             throw error;
         } finally {
-            setIsProcessing(false);
-            setProcessingStep('');
+            if (mountedRef.current) {
+                setIsProcessing(false);
+                setProcessingStep('');
+            }
         }
     };
-
-    const cleanup = useCallback(() => {
-        pollingIntervalsRef.current.forEach(interval => clearInterval(interval));
-        pollingIntervalsRef.current.clear();
-    }, []);
 
     const regenerateAnalysis = async (currentProject: AppProject | null): Promise<AppProject | null> => {
         if (!currentProject) return null;
 
-        setIsProcessing(true);
-        setProcessingStep('Re-analyzing content with AI...');
+        if (mountedRef.current) {
+            setIsProcessing(true);
+            setProcessingStep('Re-analyzing content with AI...');
+        }
 
         try {
-            console.log('Regenerating analysis with language:', currentProject.detectedLanguage);
-
-            // Re-analyze content with the current detected language
             const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(currentProject.script);
 
-            setProcessingStep('Generating practice sentences...');
+            if (mountedRef.current) {
+                setProcessingStep('Generating practice sentences...');
+            }
 
-            // Regenerate practice sentences
             const practiceSentences = await generatePracticeSentences(vocabulary, grammar, detectedLanguage);
 
-            setProcessingStep('');
+            if (mountedRef.current) {
+                setProcessingStep('');
+            }
 
             toast({
                 title: "Analysis regenerated!",
@@ -451,8 +455,10 @@ export const useVideoProcessing = () => {
             });
             return null;
         } finally {
-            setIsProcessing(false);
-            setProcessingStep('');
+            if (mountedRef.current) {
+                setIsProcessing(false);
+                setProcessingStep('');
+            }
         }
     };
 

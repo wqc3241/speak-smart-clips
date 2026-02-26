@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
- import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
- import { Youtube, Loader2, Plus } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast";
- import { LearningPath } from "@/components/features/learning/LearningPath";
- import { QuizInterface } from "@/components/features/learning/QuizInterface";
+import { Loader2 } from 'lucide-react';
+import { LearningPath } from "@/components/features/learning/LearningPath";
+import { QuizInterface } from "@/components/features/learning/QuizInterface";
+import { VideoDiscovery } from "@/components/features/video/VideoDiscovery";
 
 interface InputTabProps {
     isProcessing: boolean;
@@ -21,39 +20,13 @@ export const InputTab: React.FC<InputTabProps> = ({
     onProcessVideo,
     onUseTestData
 }) => {
-    const [youtubeUrl, setYoutubeUrl] = useState('');
     const [showLanguageSelector, setShowLanguageSelector] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState<string>('');
     const [pendingVideoId, setPendingVideoId] = useState<string>('');
-    const { toast } = useToast();
- 
-     const [activeQuiz, setActiveQuiz] = useState<{ unitId: number } | null>(null);
 
-    const extractVideoId = (url: string) => {
-        const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/);
-        return match ? match[1] : null;
-    };
+    const [activeQuiz, setActiveQuiz] = useState<{ unitId: number } | null>(null);
 
-    const handleUrlSubmit = () => {
-        if (!youtubeUrl) {
-            toast({
-                title: "Please enter a YouTube URL",
-                variant: "destructive",
-            });
-            return;
-        }
-
-        const videoId = extractVideoId(youtubeUrl);
-        if (!videoId) {
-            toast({
-                title: "Invalid YouTube URL",
-                description: "Please enter a valid YouTube video URL",
-                variant: "destructive",
-            });
-            return;
-        }
-
-        // Show language selector immediately
+    const handleVideoSelected = (videoId: string) => {
         setPendingVideoId(videoId);
         setShowLanguageSelector(true);
         setSelectedLanguage('');
@@ -64,7 +37,6 @@ export const InputTab: React.FC<InputTabProps> = ({
 
         setShowLanguageSelector(false);
 
-        // Map the language name to language code for transcript extraction
         const languageCodeMap: { [key: string]: string } = {
             'Japanese': 'ja',
             'Chinese': 'zh',
@@ -83,63 +55,37 @@ export const InputTab: React.FC<InputTabProps> = ({
         await onProcessVideo(pendingVideoId, languageCode, selectedLanguage);
     };
 
-     // If quiz is active, show quiz interface
-     if (activeQuiz) {
-         return (
-             <QuizInterface
-                 unitId={activeQuiz.unitId}
-                 onComplete={() => setActiveQuiz(null)}
-                 onExit={() => setActiveQuiz(null)}
-             />
-         );
-     }
- 
+    if (activeQuiz) {
+        return (
+            <QuizInterface
+                unitId={activeQuiz.unitId}
+                onComplete={() => setActiveQuiz(null)}
+                onExit={() => setActiveQuiz(null)}
+            />
+        );
+    }
+
     return (
-         <div className="space-y-6">
-             {/* Compact Add Video Section */}
-             <Card className="border bg-card/50">
-                 <CardContent className="p-3">
-                     <div className="flex items-center gap-2">
-                         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                             <Plus className="w-4 h-4" />
-                             <span className="hidden sm:inline">Add Video</span>
-                         </div>
-                         <Input
-                             placeholder="Paste YouTube URL..."
-                             value={youtubeUrl}
-                             onChange={(e) => setYoutubeUrl(e.target.value)}
-                             className="h-9 flex-1"
-                         />
-                         <Button
-                             onClick={handleUrlSubmit}
-                             size="sm"
-                             disabled={isProcessing}
-                             className="h-9 px-4"
-                         >
-                             {isProcessing ? (
-                                 <Loader2 className="w-4 h-4 animate-spin" />
-                             ) : (
-                                 <Youtube className="w-4 h-4" />
-                             )}
-                         </Button>
-                         <Button
-                             onClick={onUseTestData}
-                             variant="ghost"
-                             size="sm"
-                             disabled={isProcessing}
-                             className="h-9 text-xs text-muted-foreground hover:text-foreground"
-                         >
-                             Demo
-                         </Button>
-                     </div>
-                     {isProcessing && processingStep && (
-                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 animate-fade-in">
-                             <Loader2 className="w-3 h-3 animate-spin" />
-                             <span>{processingStep}</span>
-                         </div>
-                     )}
-                 </CardContent>
-             </Card>
+        <div className="space-y-6">
+            {/* Processing indicator */}
+            {isProcessing && processingStep && (
+                <Card className="border bg-card/50">
+                    <CardContent className="p-3">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground animate-fade-in">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>{processingStep}</span>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Video Discovery */}
+            {!showLanguageSelector && !isProcessing && (
+                <VideoDiscovery
+                    onSelectVideo={handleVideoSelected}
+                    isProcessing={isProcessing}
+                />
+            )}
 
             {/* Language Selection Dialog */}
             {showLanguageSelector && (
@@ -199,8 +145,8 @@ export const InputTab: React.FC<InputTabProps> = ({
                 </Card>
             )}
 
-             {/* Duolingo-style Learning Path */}
-             <LearningPath onStartLesson={(unitId) => setActiveQuiz({ unitId })} />
+            {/* Duolingo-style Learning Path */}
+            <LearningPath onStartLesson={(unitId) => setActiveQuiz({ unitId })} />
         </div>
     );
 };

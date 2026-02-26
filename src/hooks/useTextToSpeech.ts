@@ -5,36 +5,39 @@ import { useToast } from "@/hooks/use-toast";
 export const useTextToSpeech = () => {
     const [isPlaying, setIsPlaying] = useState(false);
     const { toast } = useToast();
-    const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+    const currentAudioRef = useRef<HTMLAudioElement | null>(null);
     const [currentText, setCurrentText] = useState<string | null>(null);
     const currentObjectUrlRef = useRef<string | null>(null);
+    const mountedRef = useRef(true);
 
     useEffect(() => {
+        mountedRef.current = true;
         return () => {
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio.src = '';
+            mountedRef.current = false;
+            if (currentAudioRef.current) {
+                currentAudioRef.current.pause();
+                currentAudioRef.current.src = '';
             }
             if (currentObjectUrlRef.current) {
                 URL.revokeObjectURL(currentObjectUrlRef.current);
                 currentObjectUrlRef.current = null;
             }
         };
-    }, [currentAudio]);
+    }, []);
 
     const speak = async (text: string, voice: string = 'coral', instructions?: string) => {
         try {
             // If clicking the same button that's playing, stop it
-            if (isPlaying && currentAudio && currentText === text) {
-                currentAudio.pause();
+            if (isPlaying && currentAudioRef.current && currentText === text) {
+                currentAudioRef.current.pause();
                 setIsPlaying(false);
                 setCurrentText(null);
                 return;
             }
 
             // If different audio is playing, stop it first
-            if (isPlaying && currentAudio) {
-                currentAudio.pause();
+            if (isPlaying && currentAudioRef.current) {
+                currentAudioRef.current.pause();
             }
 
             setIsPlaying(true);
@@ -60,12 +63,14 @@ export const useTextToSpeech = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`,
                 },
-                body: JSON.stringify({ 
-                    text, 
+                body: JSON.stringify({
+                    text,
                     voice,
                     ...(instructions && { instructions })
                 }),
             });
+
+            if (!mountedRef.current) return;
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -73,6 +78,9 @@ export const useTextToSpeech = () => {
             }
 
             const blob = await response.blob();
+
+            if (!mountedRef.current) return;
+
             const url = URL.createObjectURL(blob);
             if (currentObjectUrlRef.current) {
                 URL.revokeObjectURL(currentObjectUrlRef.current);
@@ -81,33 +89,38 @@ export const useTextToSpeech = () => {
             const audio = new Audio(url);
 
             audio.onended = () => {
-                setIsPlaying(false);
-                setCurrentText(null);
-                URL.revokeObjectURL(url);
                 if (currentObjectUrlRef.current === url) {
+                    URL.revokeObjectURL(url);
                     currentObjectUrlRef.current = null;
+                }
+                if (mountedRef.current) {
+                    setIsPlaying(false);
+                    setCurrentText(null);
                 }
             };
 
             audio.onerror = (e) => {
                 console.error('Audio playback error', e);
-                setIsPlaying(false);
-                setCurrentText(null);
-                URL.revokeObjectURL(url);
                 if (currentObjectUrlRef.current === url) {
+                    URL.revokeObjectURL(url);
                     currentObjectUrlRef.current = null;
                 }
-                toast({
-                    title: "Playback Error",
-                    description: "Failed to play the audio.",
-                    variant: "destructive",
-                });
+                if (mountedRef.current) {
+                    setIsPlaying(false);
+                    setCurrentText(null);
+                    toast({
+                        title: "Playback Error",
+                        description: "Failed to play the audio.",
+                        variant: "destructive",
+                    });
+                }
             };
 
-            setCurrentAudio(audio);
+            currentAudioRef.current = audio;
             await audio.play();
 
         } catch (error: unknown) {
+            if (!mountedRef.current) return;
             const message = error instanceof Error ? error.message : "Could not generate audio. Please try again.";
             console.error('TTS Error:', error);
             toast({

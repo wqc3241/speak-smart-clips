@@ -2,6 +2,8 @@ export interface VocabularyItem {
   word: string;
   definition?: string;
   meaning?: string;
+  reading?: string;
+  partOfSpeech?: string;
   difficulty?: 'beginner' | 'intermediate' | 'advanced' | string;
 }
 
@@ -17,6 +19,10 @@ export interface PracticeSentence {
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   usedVocabulary: string[];
   usedGrammar: string[];
+  japanese?: string;
+  original?: string;
+  english?: string;
+  romanization?: string;
 }
 
 export interface AppProject {

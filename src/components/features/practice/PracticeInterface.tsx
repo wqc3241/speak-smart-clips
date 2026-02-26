@@ -28,8 +28,6 @@ export const PracticeInterface: React.FC<PracticeInterfaceProps> = ({ project, o
     setIsLoading(true);
     
     try {
-      console.log('Generating practice sentences...');
-
       const vocabulary = project?.vocabulary ?? [];
       const grammar = project?.grammar ?? [];
       const detectedLanguage = project?.detectedLanguage ?? 'Unknown';

@@ -18,7 +18,7 @@
    onComplete,
    onExit,
  }) => {
-   const { questions, isLoading, regenerate } = useQuizData();
+   const { questions, isLoading, regenerate, forceRegenerate } = useQuizData();
    const [currentIndex, setCurrentIndex] = useState(0);
    const [hearts, setHearts] = useState(3);
    const [score, setScore] = useState(0);
@@ -31,7 +31,7 @@
    const progress = ((currentIndex + 1) / questions.length) * 100;
  
    useEffect(() => {
-     // Regenerate questions when starting a new quiz
+     // Load questions (uses cache if available, only generates on first load)
      regenerate();
   }, [unitId, regenerate]);
  
@@ -62,7 +62,7 @@
    };
  
    const handleRetry = () => {
-     regenerate();
+     forceRegenerate();
      setCurrentIndex(0);
      setHearts(3);
      setScore(0);

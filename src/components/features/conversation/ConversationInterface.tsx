@@ -62,7 +62,6 @@ export const ConversationInterface: React.FC<ConversationInterfaceProps> = ({ pr
 
   const toggleListening = () => {
     setIsListening(!isListening);
-    console.log('Speech recognition:', !isListening ? 'started' : 'stopped');
   };
 
   return (
@@ -74,7 +73,7 @@ export const ConversationInterface: React.FC<ConversationInterfaceProps> = ({ pr
         </CardTitle>
         <Badge variant="outline" className="w-fit">{project.vocabulary.length} words</Badge>
       </CardHeader>
-      
+
       <CardContent className="flex-1 flex flex-col p-0">
         <ScrollArea className="flex-1 px-4 pt-4">
           <div className="space-y-3 pb-4">
@@ -107,7 +106,7 @@ export const ConversationInterface: React.FC<ConversationInterfaceProps> = ({ pr
                     <div className="mt-2 flex flex-wrap gap-1">
                       {message.suggestedWords.map((word, index) => (
                         <Badge
-                          key={index}
+                          key={`${message.id}-${word}-${index}`}
                           variant="secondary"
                           className="text-xs cursor-pointer"
                           onClick={() => setCurrentMessage(prev => prev + ' ' + word)}
@@ -137,11 +136,11 @@ export const ConversationInterface: React.FC<ConversationInterfaceProps> = ({ pr
               placeholder="Type your message..."
               value={currentMessage}
               onChange={(e) => setCurrentMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
               className="flex-1"
             />
-            <Button 
-              onClick={handleSendMessage} 
+            <Button
+              onClick={handleSendMessage}
               disabled={!currentMessage.trim()}
               size="icon"
               className="shrink-0"

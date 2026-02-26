@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Highlighter, Volume2, Loader2 } from 'lucide-react';
+import { FileText, Highlighter, Volume2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 
@@ -25,6 +25,13 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
     }
   };
 
+  const handleWordKeyDown = (e: React.KeyboardEvent, word: string) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleWordClick(word);
+    }
+  };
+
   const handleSpeak = () => {
     speak(script);
   };
@@ -36,10 +43,13 @@ export const ScriptDisplay: React.FC<ScriptDisplayProps> = ({ script }) => {
 
       return (
         <span
-          key={index}
+          key={`${index}-${cleanWord}`}
+          role="button"
+          tabIndex={0}
           className={`cursor-pointer hover:bg-accent px-1 py-0.5 rounded transition-colors ${isHighlighted ? 'bg-primary/20 font-medium' : ''
             }`}
           onClick={() => handleWordClick(word)}
+          onKeyDown={(e) => handleWordKeyDown(e, word)}
         >
           {word}{' '}
         </span>

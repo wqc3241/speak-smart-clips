@@ -5,11 +5,11 @@ export const TEST_VIDEO_URL = "https://www.youtube.com/watch?v=test_sample_123";
 
 export const AVATAR_URL = 'https://evmamwdmwogmlezndueg.supabase.co/storage/v1/object/public/App_Image/orange_fox.png';
 
-// Development testing mode - set to true to auto-login with test account
-export const DEV_TEST_MODE = true;
+// Development testing mode - reads from environment variable
+export const DEV_TEST_MODE = import.meta.env.VITE_DEV_TEST_MODE === 'true';
 
 // Test account credentials for auto-login (only used when DEV_TEST_MODE is true)
 export const TEST_ACCOUNT = {
-  email: 'qichaotomwang+1@gmail.com',
-  password: 'SpeakSmartClips2025!',
+  email: import.meta.env.VITE_TEST_EMAIL ?? '',
+  password: import.meta.env.VITE_TEST_PASSWORD ?? '',
 };

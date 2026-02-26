@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { User } from '@supabase/supabase-js';
 import type { AppProject } from '@/types/project';
+import { toJson } from '@/lib/typeGuards';
 
 export const useProject = (user: User | null) => {
     const [currentProject, setCurrentProject] = useState<AppProject | null>(null);
@@ -10,8 +11,6 @@ export const useProject = (user: User | null) => {
         if (!projectToSave || !user?.id) return;
 
         try {
-            console.log('Auto-saving project to database...');
-
             // Check if project with this URL already exists for this user
             const { data: existing, error: checkError } = await supabase
                 .from('projects')
@@ -31,9 +30,9 @@ export const useProject = (user: User | null) => {
                     .update({
                         title: projectToSave.title,
                         script: projectToSave.script || '',
-                    vocabulary: (projectToSave.vocabulary || []) as unknown as import('@/integrations/supabase/types').Json,
-                    grammar: (projectToSave.grammar || []) as unknown as import('@/integrations/supabase/types').Json,
-                    practice_sentences: (projectToSave.practiceSentences || []) as unknown as import('@/integrations/supabase/types').Json,
+                        vocabulary: toJson(projectToSave.vocabulary || []),
+                        grammar: toJson(projectToSave.grammar || []),
+                        practice_sentences: toJson(projectToSave.practiceSentences || []),
                         detected_language: projectToSave.detectedLanguage,
                         status: projectToSave.status || 'completed',
                         job_id: projectToSave.jobId,
@@ -52,9 +51,9 @@ export const useProject = (user: User | null) => {
                     youtube_url: projectToSave.url,
                     title: projectToSave.title,
                     script: projectToSave.script || '',
-                    vocabulary: (projectToSave.vocabulary || []) as unknown as import('@/integrations/supabase/types').Json,
-                    grammar: (projectToSave.grammar || []) as unknown as import('@/integrations/supabase/types').Json,
-                    practice_sentences: (projectToSave.practiceSentences || []) as unknown as import('@/integrations/supabase/types').Json,
+                    vocabulary: toJson(projectToSave.vocabulary || []),
+                    grammar: toJson(projectToSave.grammar || []),
+                    practice_sentences: toJson(projectToSave.practiceSentences || []),
                     detected_language: projectToSave.detectedLanguage,
                     status: projectToSave.status || 'completed',
                     job_id: projectToSave.jobId,
@@ -65,12 +64,8 @@ export const useProject = (user: User | null) => {
 
                 if (insertError) throw insertError;
             }
-
-            // Silent save - no toast notification
-            console.log('Project auto-saved successfully');
         } catch (error: unknown) {
             console.error('Auto-save failed:', error);
-            // Don't show error toast for auto-save failures
         }
     };
 

@@ -2,16 +2,18 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { Youtube, BookOpen, MessageCircle, History, Loader2 } from 'lucide-react';
+import { Youtube, BookOpen, MessageCircle, History, Loader2, Mic } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useVideoProcessing } from "@/hooks/useVideoProcessing";
 import { useProject } from "@/hooks/useProject";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Header } from "@/components/dashboard/Header";
 import { InputTab } from "@/components/dashboard/InputTab";
 import { StudyTab } from "@/components/dashboard/StudyTab";
 import { PracticeInterface } from "@/components/features/practice/PracticeInterface";
 import { ProjectManager } from "@/components/features/project/ProjectManager";
+import { ConversationMode } from "@/components/features/conversation/ConversationMode";
 import { TEST_TRANSCRIPT, TEST_VIDEO_TITLE, TEST_VIDEO_URL } from "@/lib/constants";
 import type { AppProject, PracticeSentence } from "@/types/project";
 
@@ -34,17 +36,9 @@ const Index = () => {
     regenerateAnalysis,
     analyzeContentWithAI,
     generatePracticeSentences,
-    cleanup
   } = useVideoProcessing();
   const { currentProject, setCurrentProject, autoSaveProject } = useProject(user);
   const { toast } = useToast();
-
-  // Cleanup polling intervals on unmount
-  useEffect(() => {
-    return () => {
-      cleanup();
-    };
-  }, [cleanup]);
 
   const handleProjectCreated = (project: AppProject) => {
     setCurrentProject(project);
@@ -55,8 +49,6 @@ const Index = () => {
     setIsProcessing(true);
 
     try {
-      console.log('Using test data...');
-
       setProcessingStep('Loading test transcript...');
       toast({
         title: "Loading test data",
@@ -68,7 +60,6 @@ const Index = () => {
 
       // Still call AI analysis to test the analyze-content function
       setProcessingStep('Analyzing content with AI...');
-      console.log('Analyzing test content with AI...');
       const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(transcript);
 
       // Generate practice sentences automatically
@@ -173,6 +164,10 @@ const Index = () => {
                     <MessageCircle className="w-4 h-4" />
                     <span>Practice</span>
                   </TabsTrigger>
+                  <TabsTrigger value="talk" className="justify-start gap-2">
+                    <Mic className="w-4 h-4" />
+                    <span>Talk</span>
+                  </TabsTrigger>
                   <TabsTrigger value="projects" className="justify-start gap-2">
                     <History className="w-4 h-4" />
                     <span>Projects</span>
@@ -201,51 +196,79 @@ const Index = () => {
 
             <div className="min-w-0">
               <TabsContent value="input" className="mt-0">
-                <InputTab
-                  isProcessing={isProcessing}
-                  processingStep={processingStep}
-                  onProcessVideo={handleProcessVideo}
-                  onUseTestData={handleUseTestData}
-                />
+                <ErrorBoundary>
+                  <InputTab
+                    isProcessing={isProcessing}
+                    processingStep={processingStep}
+                    onProcessVideo={handleProcessVideo}
+                    onUseTestData={handleUseTestData}
+                  />
+                </ErrorBoundary>
               </TabsContent>
 
               <TabsContent value="lesson" className="mt-0">
-                <StudyTab
-                  currentProject={currentProject}
-                  isProcessing={isProcessing}
-                  processingStep={processingStep}
-                  onUpdateProject={setCurrentProject}
-                  onRegenerateAnalysis={handleRegenerateAnalysis}
-                />
+                <ErrorBoundary>
+                  <StudyTab
+                    currentProject={currentProject}
+                    isProcessing={isProcessing}
+                    processingStep={processingStep}
+                    onUpdateProject={setCurrentProject}
+                    onRegenerateAnalysis={handleRegenerateAnalysis}
+                  />
+                </ErrorBoundary>
               </TabsContent>
 
               <TabsContent value="conversation" className="mt-0 space-y-4 md:space-y-6">
-                {currentProject ? (
-                  <PracticeInterface
-                    project={currentProject}
-                    onSentencesUpdate={(sentences) => {
-                      setCurrentProject((prev: AppProject | null) =>
-                        prev ? { ...prev, practiceSentences: sentences as PracticeSentence[] } : null
-                      );
-                    }}
-                  />
-                ) : (
-                  <Card className="text-center py-16 border-none shadow-none">
-                    <CardContent>
-                      <MessageCircle className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-semibold text-muted-foreground mb-2">
-                        No lesson to practice
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Complete a lesson first
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                <ErrorBoundary>
+                  {currentProject ? (
+                    <PracticeInterface
+                      project={currentProject}
+                      onSentencesUpdate={(sentences) => {
+                        setCurrentProject((prev: AppProject | null) =>
+                          prev ? { ...prev, practiceSentences: sentences as PracticeSentence[] } : null
+                        );
+                      }}
+                    />
+                  ) : (
+                    <Card className="text-center py-16 border-none shadow-none">
+                      <CardContent>
+                        <MessageCircle className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-semibold text-muted-foreground mb-2">
+                          No lesson to practice
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Complete a lesson first
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </ErrorBoundary>
+              </TabsContent>
+
+              <TabsContent value="talk" className="mt-0 space-y-4 md:space-y-6">
+                <ErrorBoundary>
+                  {currentProject ? (
+                    <ConversationMode project={currentProject} />
+                  ) : (
+                    <Card className="text-center py-16 border-none shadow-none">
+                      <CardContent>
+                        <Mic className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-semibold text-muted-foreground mb-2">
+                          No lesson for conversation
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Complete a lesson first to start a voice conversation
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </ErrorBoundary>
               </TabsContent>
 
               <TabsContent value="projects" className="mt-0 space-y-4 md:space-y-6">
-                <ProjectManager onLoadProject={loadProject} />
+                <ErrorBoundary>
+                  <ProjectManager onLoadProject={loadProject} />
+                </ErrorBoundary>
               </TabsContent>
             </div>
           </div>
@@ -254,8 +277,9 @@ const Index = () => {
 
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t z-20">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           <button
+            aria-label="Input tab"
             onClick={() => setActiveTab('input')}
             className={`flex flex-col items-center gap-1 py-3 ${activeTab === 'input' ? 'text-primary' : 'text-muted-foreground'
               }`}
@@ -264,6 +288,7 @@ const Index = () => {
             <span className="text-xs">Input</span>
           </button>
           <button
+            aria-label="Study tab"
             onClick={() => setActiveTab('lesson')}
             className={`flex flex-col items-center gap-1 py-3 ${activeTab === 'lesson' ? 'text-primary' : 'text-muted-foreground'
               }`}
@@ -272,6 +297,7 @@ const Index = () => {
             <span className="text-xs">Study</span>
           </button>
           <button
+            aria-label="Practice tab"
             onClick={() => setActiveTab('conversation')}
             className={`flex flex-col items-center gap-1 py-3 ${activeTab === 'conversation' ? 'text-primary' : 'text-muted-foreground'
               }`}
@@ -280,6 +306,16 @@ const Index = () => {
             <span className="text-xs">Practice</span>
           </button>
           <button
+            aria-label="Talk tab"
+            onClick={() => setActiveTab('talk')}
+            className={`flex flex-col items-center gap-1 py-3 ${activeTab === 'talk' ? 'text-primary' : 'text-muted-foreground'
+              }`}
+          >
+            <Mic className="w-5 h-5" />
+            <span className="text-xs">Talk</span>
+          </button>
+          <button
+            aria-label="Projects tab"
             onClick={() => setActiveTab('projects')}
             className={`flex flex-col items-center gap-1 py-3 ${activeTab === 'projects' ? 'text-primary' : 'text-muted-foreground'
               }`}
@@ -294,4 +330,3 @@ const Index = () => {
 };
 
 export default Index;
-
