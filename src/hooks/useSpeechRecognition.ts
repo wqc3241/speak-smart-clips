@@ -9,24 +9,55 @@ interface SpeechRecognitionOptions {
   onEnd?: () => void;
 }
 
-// Extend Window for webkit prefix
 interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList;
   resultIndex: number;
 }
 
+const WATCHDOG_INTERVAL_MS = 3000;
+const MAX_WATCHDOG_RETRIES = 10;
+
 export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [finalTranscript, setFinalTranscript] = useState('');
+  const [debugEvents, setDebugEvents] = useState<string[]>([]);
+  const isListeningRef = useRef(false);
   const recognitionRef = useRef<any>(null);
   const mountedRef = useRef(true);
   const shouldRestartRef = useRef(false);
+  const lastStartAtRef = useRef<number | null>(null);
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
+  // Watchdog: detects when SpeechRecognition.start() succeeded but audio
+  // capture never began (iOS WebKit bug after TTS playback). Aborts and
+  // retries on the same instance, polling every 3 s instead of waiting
+  // WebKit's internal 40 s timeout.
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const watchdogRetriesRef = useRef(0);
+  const audioStartedRef = useRef(false);
+
   const isSupported = typeof window !== 'undefined' &&
     ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+
+  const pushDebugEvent = useCallback((label: string, data?: Record<string, unknown>) => {
+    const timestamp = new Date().toISOString().split('T')[1]?.replace('Z', '') ?? '';
+    const suffix = data ? ` ${JSON.stringify(data)}` : '';
+    const line = `[${timestamp}] ${label}${suffix}`;
+    setDebugEvents(prev => [...prev.slice(-29), line]);
+  }, []);
+
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  const clearWatchdog = useCallback(() => {
+    if (watchdogRef.current) {
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+  }, []);
 
   const createRecognition = useCallback(() => {
     if (!isSupported) return null;
@@ -42,60 +73,62 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     return recognition;
   }, [isSupported, options.continuous, options.interimResults, options.language]);
 
-  const stopListening = useCallback(() => {
+  const armWatchdog = useCallback(() => {
+    clearWatchdog();
+    if (watchdogRetriesRef.current >= MAX_WATCHDOG_RETRIES) {
+      pushDebugEvent('watchdog: max retries reached', { retries: watchdogRetriesRef.current });
+      return;
+    }
+    watchdogRef.current = setTimeout(() => {
+      watchdogRef.current = null;
+      if (!mountedRef.current || !shouldRestartRef.current) return;
+      if (audioStartedRef.current) return; // audio is flowing, no action needed
+
+      watchdogRetriesRef.current++;
+      pushDebugEvent('watchdog: no audio, abort+retry', { attempt: watchdogRetriesRef.current });
+
+      const rec = recognitionRef.current;
+      if (rec) {
+        try { rec.abort(); } catch { /* ignore */ }
+        // onend will fire → shouldRestart is true → auto-restart + re-arm watchdog
+      }
+    }, WATCHDOG_INTERVAL_MS);
+  }, [clearWatchdog, pushDebugEvent]);
+
+  const stopListening = useCallback((reason: string = 'manual') => {
+    pushDebugEvent('stopListening called', { reason, isListening: isListeningRef.current });
     shouldRestartRef.current = false;
+    clearWatchdog();
+    watchdogRetriesRef.current = 0;
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        recognitionRef.current.abort();
       } catch {
         // Already stopped
       }
     }
+    // Keep recognitionRef.current alive for reuse on iOS
     if (mountedRef.current) {
       setIsListening(false);
     }
-  }, []);
+  }, [pushDebugEvent, clearWatchdog]);
 
-  const startListening = useCallback(async () => {
-    if (!isSupported) return;
+  const attachHandlers = useCallback((recognition: any) => {
+    recognition.onaudiostart = () => {
+      audioStartedRef.current = true;
+      clearWatchdog();
+      watchdogRetriesRef.current = 0;
+      pushDebugEvent('onaudiostart');
+    };
 
-    // Detach handlers from old instance BEFORE stopping it. On iOS,
-    // .stop() fires onend asynchronously. If the old onend fires after
-    // we've created a new instance (with shouldRestartRef = true), it
-    // would try to restart the OLD instance — creating two competing
-    // recognition instances that both silently fail on iOS.
-    if (recognitionRef.current) {
-      recognitionRef.current.onresult = null;
-      recognitionRef.current.onerror = null;
-      recognitionRef.current.onend = null;
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        // Ignore
-      }
-    }
-
-    // Warm up the microphone — ensures permission is granted before
-    // recognition.start().  The iOS playback→recording session switch is
-    // handled by releaseAudioSession() on the TTS side.
-    if (navigator.mediaDevices?.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop());
-      } catch {
-        // Permission denied or API unavailable — continue, recognition may still work
-      }
-    }
-
-    if (!mountedRef.current) return;
-
-    const recognition = createRecognition();
-    if (!recognition) return;
-
-    recognitionRef.current = recognition;
-    shouldRestartRef.current = true;
+    recognition.onaudioend = () => {
+      audioStartedRef.current = false;
+      pushDebugEvent('onaudioend');
+    };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
+      audioStartedRef.current = true;
+      clearWatchdog();
       if (!mountedRef.current) return;
 
       let interim = '';
@@ -111,6 +144,7 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
       }
 
       if (final) {
+        pushDebugEvent('onresult final', { finalLength: final.length });
         setFinalTranscript(final);
         setTranscript('');
         optionsRef.current.onResult?.(final, true);
@@ -121,9 +155,10 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     };
 
     recognition.onerror = (event: any) => {
+      const elapsedMs = lastStartAtRef.current ? Date.now() - lastStartAtRef.current : null;
+      pushDebugEvent('onerror', { error: event?.error ?? 'unknown', elapsedMsFromStart: elapsedMs });
       if (!mountedRef.current) return;
 
-      // "no-speech" and "aborted" are normal — don't treat as fatal
       if (event.error === 'no-speech' || event.error === 'aborted') {
         return;
       }
@@ -133,72 +168,127 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
 
       if (event.error === 'not-allowed') {
         shouldRestartRef.current = false;
+        clearWatchdog();
         setIsListening(false);
       }
     };
 
     recognition.onend = () => {
+      const elapsedMs = lastStartAtRef.current ? Date.now() - lastStartAtRef.current : null;
+      pushDebugEvent('onend', { shouldRestart: shouldRestartRef.current, elapsedMsFromStart: elapsedMs });
+      audioStartedRef.current = false;
       if (!mountedRef.current) return;
 
-      // Auto-restart on browser timeout (Chrome stops after ~60s silence)
       if (shouldRestartRef.current) {
         try {
           recognition.start();
+          lastStartAtRef.current = Date.now();
+          pushDebugEvent('auto-restart start ok');
+          armWatchdog();
           return;
         } catch {
-          // Failed to restart — create a new instance
+          pushDebugEvent('auto-restart failed on same instance');
           try {
-            const newRecognition = createRecognition();
-            if (newRecognition) {
-              recognitionRef.current = newRecognition;
-              newRecognition.onresult = recognition.onresult;
-              newRecognition.onerror = recognition.onerror;
-              newRecognition.onend = recognition.onend;
-              newRecognition.start();
+            const fresh = createRecognition();
+            if (fresh) {
+              recognitionRef.current = fresh;
+              attachHandlers(fresh);
+              fresh.start();
+              lastStartAtRef.current = Date.now();
+              pushDebugEvent('auto-restart new instance ok');
+              armWatchdog();
               return;
             }
           } catch {
-            // Give up restarting
+            pushDebugEvent('auto-restart failed completely');
           }
         }
       }
 
+      // Don't null recognitionRef — keep instance for reuse on next startListening
       setIsListening(false);
       optionsRef.current.onEnd?.();
     };
+  }, [pushDebugEvent, clearWatchdog, armWatchdog, createRecognition]);
+
+  const startListening = useCallback(async (trigger: string = 'unknown') => {
+    if (!isSupported) return;
+    pushDebugEvent('startListening called', {
+      trigger,
+      hasRecognition: Boolean(recognitionRef.current),
+      shouldRestart: shouldRestartRef.current,
+      isListening: isListeningRef.current,
+      userActivation: typeof navigator !== 'undefined' && 'userActivation' in navigator
+        ? (navigator as any).userActivation?.isActive ?? null
+        : null,
+      ttsReleasedAgoMs: typeof window !== 'undefined' && (window as any).__audioSessionDebug?.releasedAt
+        ? Date.now() - (window as any).__audioSessionDebug.releasedAt
+        : null,
+      ttsEndedAgoMs: typeof window !== 'undefined' && (window as any).__audioSessionDebug?.endedAt
+        ? Date.now() - (window as any).__audioSessionDebug.endedAt
+        : null,
+    });
+
+    clearWatchdog();
+    watchdogRetriesRef.current = 0;
+    audioStartedRef.current = false;
+    shouldRestartRef.current = true;
+
+    // If currently listening, abort first
+    if (recognitionRef.current && isListeningRef.current) {
+      try { recognitionRef.current.abort(); } catch { /* ignore */ }
+      pushDebugEvent('aborted active recognition');
+    }
+
+    // Try to REUSE existing instance — on iOS WebKit, reusing the same
+    // SpeechRecognition instance avoids the audio-session negotiation that
+    // causes the 40 s freeze with new instances after TTS playback.
+    if (recognitionRef.current) {
+      try {
+        attachHandlers(recognitionRef.current);
+        recognitionRef.current.start();
+        lastStartAtRef.current = Date.now();
+        pushDebugEvent('reused recognition.start ok');
+        armWatchdog();
+        if (mountedRef.current) {
+          setIsListening(true);
+          setTranscript('');
+          setFinalTranscript('');
+        }
+        return;
+      } catch (e) {
+        pushDebugEvent('reused recognition.start failed', {
+          error: e instanceof Error ? e.message : String(e),
+        });
+        recognitionRef.current = null;
+        // Fall through to create a new instance
+      }
+    }
+
+    if (!mountedRef.current) return;
+
+    const recognition = createRecognition();
+    if (!recognition) return;
+    recognitionRef.current = recognition;
+    attachHandlers(recognition);
 
     try {
       recognition.start();
+      lastStartAtRef.current = Date.now();
+      pushDebugEvent('recognition.start ok (new)');
+      armWatchdog();
       if (mountedRef.current) {
         setIsListening(true);
         setTranscript('');
         setFinalTranscript('');
       }
     } catch (e) {
-      console.error('Failed to start speech recognition, retrying:', e);
-      // iOS may need a moment after audio playback before mic is available.
-      // Retry once after a short delay with a fresh instance.
-      setTimeout(() => {
-        if (!mountedRef.current || !shouldRestartRef.current) return;
-        try {
-          const retry = createRecognition();
-          if (!retry) return;
-          recognitionRef.current = retry;
-          retry.onresult = recognition.onresult;
-          retry.onerror = recognition.onerror;
-          retry.onend = recognition.onend;
-          retry.start();
-          if (mountedRef.current) {
-            setIsListening(true);
-            setTranscript('');
-            setFinalTranscript('');
-          }
-        } catch (retryErr) {
-          console.error('Speech recognition retry also failed:', retryErr);
-        }
-      }, 500);
+      pushDebugEvent('recognition.start threw', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+      console.error('Failed to start speech recognition:', e);
     }
-  }, [isSupported, createRecognition]);
+  }, [isSupported, createRecognition, pushDebugEvent, clearWatchdog, armWatchdog, attachHandlers]);
 
   const resetTranscript = useCallback(() => {
     setTranscript('');
@@ -210,15 +300,13 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     return () => {
       mountedRef.current = false;
       shouldRestartRef.current = false;
+      clearWatchdog();
       if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch {
-          // Ignore
-        }
+        try { recognitionRef.current.abort(); } catch { /* ignore */ }
+        recognitionRef.current = null;
       }
     };
-  }, []);
+  }, [clearWatchdog]);
 
   return {
     isListening,
@@ -228,5 +316,6 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     startListening,
     stopListening,
     resetTranscript,
+    debugEvents,
   };
 };

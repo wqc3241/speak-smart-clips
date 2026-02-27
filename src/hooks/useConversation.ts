@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
-import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { useWhisperSTT } from '@/hooks/useWhisperSTT';
 import { languageToBCP47, isStopPhrase } from '@/lib/languageUtils';
 import { saveSession } from '@/lib/conversationStorage';
 import { useToast } from '@/hooks/use-toast';
@@ -185,20 +185,13 @@ export const useConversation = (project: AppProject | null) => {
     }
   }, [project, callConversationChat, speak, toast]);
 
-  // Speech recognition — use finalTranscript to trigger processUserInput
+  // ---------- STT: OpenAI Whisper (all platforms) ----------
+
   const {
-    isListening,
-    isSupported,
-    transcript,
-    finalTranscript,
-    startListening,
-    stopListening,
-    resetTranscript,
-  } = useSpeechRecognition({
-    language: bcp47,
-    continuous: true,
-    interimResults: true,
-  });
+    isListening, isSupported, transcript, finalTranscript,
+    startListening, stopListening, resetTranscript,
+    initMic: whisperInitMic, destroyMic: whisperDestroyMic,
+  } = useWhisperSTT({ language: bcp47 });
 
   // Update current transcript in state
   useEffect(() => {
@@ -212,7 +205,7 @@ export const useConversation = (project: AppProject | null) => {
   useEffect(() => {
     if (finalTranscript && finalTranscript !== prevFinalRef.current && stateStatusRef.current === 'listening') {
       prevFinalRef.current = finalTranscript;
-      stopListening();
+      stopListening('finalTranscript');
       processUserInput(finalTranscript);
     }
   }, [finalTranscript, processUserInput, stopListening]);
@@ -220,11 +213,9 @@ export const useConversation = (project: AppProject | null) => {
   // Stop STT while TTS is playing to prevent picking up AI's voice
   useEffect(() => {
     if (isPlaying && isListening) {
-      stopListening();
+      stopListening('tts-playing');
     }
     if (!isPlaying && stateStatusRef.current === 'speaking' && mountedRef.current) {
-      // TTS finished playing — go back to listening status.
-      // User will tap the mic button to start recording (push-to-talk).
       setState(prev => ({ ...prev, status: 'listening', currentTranscript: '' }));
       resetTranscript();
     }
@@ -235,6 +226,9 @@ export const useConversation = (project: AppProject | null) => {
 
     // Unlock audio playback on iOS Safari (must happen synchronously from tap)
     primeSpeaking();
+
+    // Pre-init the mic so it's warm when the user taps the mic button
+    whisperInitMic().catch(() => {});
 
     const id = crypto.randomUUID();
     sessionIdRef.current = id;
@@ -291,12 +285,15 @@ export const useConversation = (project: AppProject | null) => {
     } finally {
       processingRef.current = false;
     }
-  }, [project, callConversationChat, speak, primeSpeaking, toast]);
+  }, [project, callConversationChat, speak, primeSpeaking, whisperInitMic, toast]);
 
   const stopConversation = useCallback(async () => {
-    stopListening();
+    stopListening('stopConversation');
     stopSpeaking();
     processingRef.current = false;
+
+    // Release mic hardware
+    whisperDestroyMic();
 
     const currentMessages = messagesRef.current;
 
@@ -355,7 +352,7 @@ export const useConversation = (project: AppProject | null) => {
         setIsGeneratingSummary(false);
       }
     }
-  }, [project, callConversationSummary, stopListening, stopSpeaking, toast]);
+  }, [project, callConversationSummary, stopListening, stopSpeaking, whisperDestroyMic, toast]);
 
   // Keep stopConversationRef in sync
   useEffect(() => {
@@ -372,7 +369,7 @@ export const useConversation = (project: AppProject | null) => {
     if (stateStatusRef.current !== 'listening') return;
     prevFinalRef.current = '';
     resetTranscript();
-    startListening();
+    startListening('mic-button');
   }, [startListening, resetTranscript]);
 
   // Cleanup on unmount
@@ -380,9 +377,10 @@ export const useConversation = (project: AppProject | null) => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      stopListening();
+      stopListening('unmount');
+      whisperDestroyMic();
     };
-  }, [stopListening]);
+  }, [stopListening, whisperDestroyMic]);
 
   return {
     state,

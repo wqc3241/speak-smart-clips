@@ -5,20 +5,18 @@ import { useToast } from "@/hooks/use-toast";
 // Tiny silent WAV — used to "unlock" audio playback on iOS Safari
 const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
-/** Flush iOS out of playback-mode audio session so the mic can activate. */
+/**
+ * Mark the audio-session release timestamp for STT debugging.
+ * We intentionally do NOT create an AudioContext here — on iOS each
+ * AudioContext grabs the hardware audio session and a leaked context was
+ * causing the 40 s mic freeze (mediaserverd timeout).
+ */
 function releaseAudioSession() {
-  try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.connect(ctx.destination);
-    src.start();
-    src.onended = () => ctx.close().catch(() => {});
-  } catch {
-    // Best-effort — non-critical
+  if (typeof window !== 'undefined') {
+    (window as any).__audioSessionDebug = {
+      ...((window as any).__audioSessionDebug || {}),
+      releasedAt: Date.now(),
+    };
   }
 }
 
@@ -154,15 +152,22 @@ export const useTextToSpeech = () => {
             audio.onerror = null;
 
             audio.onended = () => {
+                if (typeof window !== 'undefined') {
+                    (window as any).__audioSessionDebug = {
+                        ...((window as any).__audioSessionDebug || {}),
+                        endedAt: Date.now(),
+                    };
+                }
                 if (currentObjectUrlRef.current === url) {
                     URL.revokeObjectURL(url);
                     currentObjectUrlRef.current = null;
                 }
-                // Release the audio resource so iOS frees the audio session
-                // for mic input. Null handlers first to prevent onerror firing.
+                // Aggressively release the audio resource so iOS
+                // mediaserverd frees the hardware for mic input.
                 audio.onended = null;
                 audio.onerror = null;
-                audio.removeAttribute('src');
+                audio.pause();
+                audio.src = '';
                 audio.load();
                 releaseAudioSession();
                 if (mountedRef.current) {

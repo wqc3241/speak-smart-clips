@@ -323,6 +323,7 @@ const ActiveConversation: React.FC<ActiveConversationProps> = ({
 
     {/* Text input fallback */}
     <div className="p-3 border-t">
+
       <div className="flex gap-2">
         {state.status === 'listening' && !isListening ? (
           <button
