@@ -953,5 +953,77 @@ describe('User Journey Integration', () => {
       ).length;
       expect(generateCallsAfter).toBe(generateCallsBefore);
     });
+
+    it('existing learning units are never regenerated — zero generation calls across load, tab switches, and refreshes', async () => {
+      // Render the app for an existing account that already has learning units
+      const { unmount } = renderApp('/');
+
+      // Wait for units to load from DB
+      await waitFor(() => {
+        expect(screen.getByText('Learning Path')).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      // Verify exact unit content is displayed
+      expect(screen.getByText('Basic Tennis Vocabulary')).toBeInTheDocument();
+      expect(screen.getByText('Polite Match Phrases')).toBeInTheDocument();
+      expect(screen.getByText('2 units')).toBeInTheDocument();
+
+      // CRITICAL: zero generate-learning-units calls on initial load
+      const generateCalls = () =>
+        mockFunctionsInvoke.mock.calls.filter(
+          (call: unknown[]) => call[0] === 'generate-learning-units',
+        ).length;
+      expect(generateCalls()).toBe(0);
+
+      // ── Tab switch: Learn → Search → Talk → Learn ──
+      await user.click(screen.getByRole('tab', { name: /search/i }));
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search YouTube for videos...')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: /talk/i }));
+      await waitFor(() => {
+        expect(screen.getByText('Voice Conversation')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: /learn/i }));
+      await waitFor(() => {
+        expect(screen.getByText('Basic Tennis Vocabulary')).toBeInTheDocument();
+        expect(screen.getByText('Polite Match Phrases')).toBeInTheDocument();
+      });
+
+      // Still zero generation calls after tab switches
+      expect(generateCalls()).toBe(0);
+
+      // ── First refresh (unmount + remount) ──
+      unmount();
+      const { unmount: unmount2 } = renderApp('/');
+
+      await waitFor(() => {
+        expect(screen.getByText('Learning Path')).toBeInTheDocument();
+        expect(screen.getByText('Basic Tennis Vocabulary')).toBeInTheDocument();
+        expect(screen.getByText('Polite Match Phrases')).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      // Still zero generation calls after first refresh
+      expect(generateCalls()).toBe(0);
+
+      // ── Second refresh ──
+      unmount2();
+      renderApp('/');
+
+      await waitFor(() => {
+        expect(screen.getByText('Learning Path')).toBeInTheDocument();
+        expect(screen.getByText('Basic Tennis Vocabulary')).toBeInTheDocument();
+        expect(screen.getByText('Polite Match Phrases')).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      // Still zero generation calls after second refresh
+      expect(generateCalls()).toBe(0);
+
+      // Verify unit content is still identical (not reordered, not duplicated)
+      expect(screen.getByText('2 units')).toBeInTheDocument();
+      expect(screen.getAllByText('10 questions').length).toBeGreaterThanOrEqual(1);
+    });
   });
 });
