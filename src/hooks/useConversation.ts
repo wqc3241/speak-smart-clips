@@ -32,7 +32,7 @@ export const useConversation = (project: AppProject | null) => {
 
   const { toast } = useToast();
   const bcp47 = project ? languageToBCP47(project.detectedLanguage) : 'en-US';
-  const { speak: openaiSpeak, stop: stopSpeaking, isPlaying } = useTextToSpeech();
+  const { speak: openaiSpeak, stop: stopSpeaking, prime: primeSpeaking, isPlaying } = useTextToSpeech();
 
   // Wrap OpenAI TTS to pass language-appropriate voice instructions
   const speakRef = useRef<(text: string) => Promise<void>>();
@@ -234,6 +234,9 @@ export const useConversation = (project: AppProject | null) => {
   const startConversation = useCallback(async () => {
     if (!project) return;
 
+    // Unlock audio playback on iOS Safari (must happen synchronously from tap)
+    primeSpeaking();
+
     const id = crypto.randomUUID();
     sessionIdRef.current = id;
     startedAtRef.current = new Date().toISOString();
@@ -289,7 +292,7 @@ export const useConversation = (project: AppProject | null) => {
     } finally {
       processingRef.current = false;
     }
-  }, [project, callConversationChat, speak, toast]);
+  }, [project, callConversationChat, speak, primeSpeaking, toast]);
 
   const stopConversation = useCallback(async () => {
     stopListening();
@@ -361,8 +364,9 @@ export const useConversation = (project: AppProject | null) => {
   }, [stopConversation]);
 
   const sendTextMessage = useCallback((text: string) => {
+    primeSpeaking(); // Unlock audio on iOS before async work
     processUserInput(text);
-  }, [processUserInput]);
+  }, [processUserInput, primeSpeaking]);
 
   // Cleanup on unmount
   useEffect(() => {

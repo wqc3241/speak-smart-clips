@@ -2,21 +2,39 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+// Tiny silent WAV — used to "unlock" audio playback on iOS Safari
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+
 export const useTextToSpeech = () => {
     const [isPlaying, setIsPlaying] = useState(false);
     const { toast } = useToast();
-    const currentAudioRef = useRef<HTMLAudioElement | null>(null);
     const [currentText, setCurrentText] = useState<string | null>(null);
     const currentObjectUrlRef = useRef<string | null>(null);
     const mountedRef = useRef(true);
+
+    // Persistent Audio element — created once, reused across plays.
+    // iOS Safari requires play() from a user gesture; once an element is
+    // "unlocked" it stays unlocked for subsequent src changes.
+    const audioElRef = useRef<HTMLAudioElement | null>(null);
+
+    const getAudio = () => {
+        if (!audioElRef.current) {
+            audioElRef.current = new Audio();
+        }
+        return audioElRef.current;
+    };
 
     useEffect(() => {
         mountedRef.current = true;
         return () => {
             mountedRef.current = false;
-            if (currentAudioRef.current) {
-                currentAudioRef.current.pause();
-                currentAudioRef.current.src = '';
+            const audio = audioElRef.current;
+            if (audio) {
+                audio.onended = null;
+                audio.onerror = null;
+                audio.pause();
+                audio.src = '';
+                audioElRef.current = null;
             }
             if (currentObjectUrlRef.current) {
                 URL.revokeObjectURL(currentObjectUrlRef.current);
@@ -25,13 +43,23 @@ export const useTextToSpeech = () => {
         };
     }, []);
 
+    /**
+     * Call synchronously from a user-gesture handler (click/tap) to unlock
+     * audio playback on iOS Safari. Must run before any `await`.
+     */
+    const prime = () => {
+        const audio = getAudio();
+        audio.src = SILENT_WAV;
+        audio.play().then(() => audio.pause()).catch(() => {});
+    };
+
     const stop = () => {
-        if (currentAudioRef.current) {
-            currentAudioRef.current.onended = null;
-            currentAudioRef.current.onerror = null;
-            currentAudioRef.current.pause();
-            currentAudioRef.current.src = '';
-            currentAudioRef.current = null;
+        const audio = audioElRef.current;
+        if (audio) {
+            audio.onended = null;
+            audio.onerror = null;
+            audio.pause();
+            // Don't null audioElRef — we reuse the element to keep iOS unlock
         }
         if (currentObjectUrlRef.current) {
             URL.revokeObjectURL(currentObjectUrlRef.current);
@@ -46,16 +74,14 @@ export const useTextToSpeech = () => {
     const speak = async (text: string, voice: string = 'coral', instructions?: string) => {
         try {
             // If clicking the same button that's playing, stop it
-            if (isPlaying && currentAudioRef.current && currentText === text) {
-                currentAudioRef.current.pause();
-                setIsPlaying(false);
-                setCurrentText(null);
+            if (isPlaying && currentText === text) {
+                stop();
                 return;
             }
 
             // If different audio is playing, stop it first
-            if (isPlaying && currentAudioRef.current) {
-                currentAudioRef.current.pause();
+            if (isPlaying) {
+                stop();
             }
 
             setIsPlaying(true);
@@ -104,7 +130,11 @@ export const useTextToSpeech = () => {
                 URL.revokeObjectURL(currentObjectUrlRef.current);
             }
             currentObjectUrlRef.current = url;
-            const audio = new Audio(url);
+
+            // Reuse the persistent audio element (already unlocked on iOS)
+            const audio = getAudio();
+            audio.onended = null;
+            audio.onerror = null;
 
             audio.onended = () => {
                 if (currentObjectUrlRef.current === url) {
@@ -134,7 +164,7 @@ export const useTextToSpeech = () => {
                 }
             };
 
-            currentAudioRef.current = audio;
+            audio.src = url;
             await audio.play();
 
         } catch (error: unknown) {
@@ -151,5 +181,5 @@ export const useTextToSpeech = () => {
         }
     };
 
-    return { speak, stop, isPlaying, currentText };
+    return { speak, stop, prime, isPlaying, currentText };
 };
