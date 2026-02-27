@@ -20,7 +20,15 @@ export const useYouTubeSearch = () => {
         body: { query: query.trim(), languageCode },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Extract the real error message from the edge function response
+        let detail: string | undefined;
+        try {
+          const body = await (error as any).context?.json?.();
+          detail = body?.error;
+        } catch { /* no parseable body */ }
+        throw new Error(detail || error.message);
+      }
 
       if (!data?.success) {
         throw new Error(data?.error || 'Search failed');
