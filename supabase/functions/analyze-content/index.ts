@@ -48,10 +48,11 @@ serve(async (req) => {
     const systemPrompt = `You are a language learning assistant. Analyze the provided text sentence by sentence to extract key vocabulary and grammar patterns.
 
 CRITICAL INSTRUCTIONS:
-1. **Sentence-by-Sentence Analysis**: Go through the text sentence by sentence. For each sentence, identify important vocabulary and grammar structures.
-2. **Deduplication**: Consolidate your findings. Ensure there are NO duplicate vocabulary words or grammar rules in the final output. If a word or rule appears multiple times, keep only the most representative instance.
-3. **Language Detection**: Accurately detect the language (Japanese, Chinese, Korean, etc.) based on characters and particles.
-4. **Output Format**: Use the analyze_content function to return the structured result.`;
+1. **Target Language Detection**: Identify the TARGET LEARNING LANGUAGE — the foreign language being taught or spoken. Many videos are bilingual (e.g., an English-speaking teacher teaching Japanese). In such cases, the target language is the foreign language being learned (Japanese), NOT the instruction language (English). If the text is entirely in one non-English language, that is the target language. If the text is entirely in English with no foreign language content, set the target language to "English".
+2. **Sentence-by-Sentence Analysis**: Go through the text sentence by sentence. For each sentence, identify important vocabulary and grammar structures IN THE TARGET LANGUAGE ONLY. Skip vocabulary and grammar that belongs to the instruction/explanation language (e.g., skip English words in a Japanese lesson).
+3. **Deduplication**: Consolidate your findings. Ensure there are NO duplicate vocabulary words or grammar rules in the final output. If a word or rule appears multiple times, keep only the most representative instance.
+4. **Romanized Input Handling**: The transcript may contain foreign words written in Latin/Roman characters (romanized). You MUST convert them to the target language's native script. For example: "Ohayou" → おはよう, "Konnichiwa" → こんにちは, "Arigatou gozaimasu" → ありがとうございます, "Ni hao" → 你好, "Annyeonghaseyo" → 안녕하세요. NEVER output romanized forms as vocabulary words or grammar examples — always use native script.
+5. **Output Format**: Use the analyze_content function to return the structured result. All vocabulary words and grammar examples must be written in the target language's native script (e.g., kanji/kana for Japanese, hanzi for Chinese, hangul for Korean). Definitions and explanations should be in English.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -69,20 +70,20 @@ CRITICAL INSTRUCTIONS:
           type: "function",
           function: {
             name: "analyze_content",
-            description: "Extract vocabulary, grammar, and detected language from text",
+            description: "Extract vocabulary, grammar, and target learning language from text",
             parameters: {
               type: "object",
               properties: {
-                detectedLanguage: { 
+                detectedLanguage: {
                   type: "string",
-                  description: "The detected language of the text (e.g., Japanese, Chinese, Korean)"
+                  description: "The target learning language (e.g., Japanese, Chinese, Korean). For bilingual content (e.g. English teacher teaching Japanese), this is the foreign language being taught, not the instruction language."
                 },
                 vocabulary: {
                   type: "array",
                   items: {
                     type: "object",
                     properties: {
-                      word: { type: "string", description: "The vocabulary word in the original language" },
+                      word: { type: "string", description: "The vocabulary word in the target language's native script (e.g., kanji/kana for Japanese)" },
                       definition: { type: "string", description: "Clear definition in English" },
                       difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"], description: "Difficulty level" }
                     },
@@ -95,8 +96,8 @@ CRITICAL INSTRUCTIONS:
                   items: {
                     type: "object",
                     properties: {
-                      rule: { type: "string", description: "Grammar rule name in the original language" },
-                      example: { type: "string", description: "Example from the text in the original language" },
+                      rule: { type: "string", description: "Grammar rule name in the target language's native script" },
+                      example: { type: "string", description: "Example from the text in the target language's native script" },
                       explanation: { type: "string", description: "Clear explanation in English" }
                     },
                     required: ["rule", "example", "explanation"],

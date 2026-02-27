@@ -662,17 +662,15 @@ describe('User Journey Integration', () => {
       const videoTitle = await screen.findByText('Japanese Tennis Lesson');
       expect(videoTitle).toBeInTheDocument();
 
-      // Click on the first video
+      // Click on the first video — processing starts immediately (no language selector)
       await user.click(videoTitle);
 
-      // Language selector should appear
+      // Processing should begin — extract-transcript is called automatically
       await waitFor(() => {
-        expect(screen.getByText('Select Language')).toBeInTheDocument();
+        expect(mockFunctionsInvoke).toHaveBeenCalledWith('extract-transcript', expect.objectContaining({
+          body: expect.objectContaining({ videoId: 'vid-001' }),
+        }));
       });
-
-      // The Continue button should be disabled without a selection
-      const continueBtn = screen.getByRole('button', { name: /continue/i });
-      expect(continueBtn).toBeDisabled();
     });
   });
 

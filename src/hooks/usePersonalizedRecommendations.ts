@@ -4,6 +4,40 @@ import type { YouTubeSearchResult } from '@/types/youtube';
 
 const MAX_QUERIES = 3;
 const RESULTS_PER_QUERY = 4;
+const CACHE_KEY_PREFIX = 'speak-smart-clips:recommendations';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+interface CachedRecommendations {
+  queriesKey: string;
+  recommendations: YouTubeSearchResult[];
+  timestamp: number;
+}
+
+function getCacheKey(userId: string): string {
+  return `${CACHE_KEY_PREFIX}:${userId}`;
+}
+
+function loadCache(userId: string, queriesKey: string): YouTubeSearchResult[] | null {
+  try {
+    const raw = localStorage.getItem(getCacheKey(userId));
+    if (!raw) return null;
+    const cached: CachedRecommendations = JSON.parse(raw);
+    if (cached.queriesKey !== queriesKey) return null;
+    if (Date.now() - cached.timestamp > CACHE_TTL_MS) return null;
+    return cached.recommendations;
+  } catch {
+    return null;
+  }
+}
+
+function saveCache(userId: string, queriesKey: string, recommendations: YouTubeSearchResult[]): void {
+  try {
+    const data: CachedRecommendations = { queriesKey, recommendations, timestamp: Date.now() };
+    localStorage.setItem(getCacheKey(userId), JSON.stringify(data));
+  } catch {
+    // Silently fail if localStorage is full
+  }
+}
 
 export function usePersonalizedRecommendations(searchHistory: string[]) {
   const [recommendations, setRecommendations] = useState<YouTubeSearchResult[]>([]);
@@ -19,16 +53,27 @@ export function usePersonalizedRecommendations(searchHistory: string[]) {
       return;
     }
 
-    // Don't re-fetch if the queries haven't changed
+    // Don't re-fetch if the queries haven't changed within same mount lifecycle
     if (fetchedKeyRef.current === queriesKey) return;
     fetchedKeyRef.current = queriesKey;
 
-    const queries = queriesKey.split('\n');
     let cancelled = false;
 
     const fetchRecommendations = async () => {
+      // Get current user for per-account caching
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id || 'anonymous';
+
+      // Check cache first — avoid YouTube API call if fresh
+      const cached = loadCache(userId, queriesKey);
+      if (cached) {
+        if (!cancelled) setRecommendations(cached);
+        return;
+      }
+
       setIsLoading(true);
       try {
+        const queries = queriesKey.split('\n');
         const batches = await Promise.all(
           queries.map((query) =>
             supabase.functions
@@ -57,6 +102,7 @@ export function usePersonalizedRecommendations(searchHistory: string[]) {
         }
 
         setRecommendations(combined);
+        saveCache(userId, queriesKey, combined);
       } catch (error) {
         console.error('Failed to fetch personalized recommendations:', error);
       } finally {

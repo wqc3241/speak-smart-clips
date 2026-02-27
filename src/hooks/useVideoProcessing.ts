@@ -302,8 +302,6 @@ export const useVideoProcessing = () => {
 
     const processVideo = async (
         videoId: string,
-        languageCode?: string,
-        selectedLanguageName?: string,
         userId?: string,
         onProjectUpdate?: (project: AppProject) => void
     ): Promise<AppProject> => {
@@ -313,7 +311,25 @@ export const useVideoProcessing = () => {
         }
 
         try {
-            const result = await fetchTranscript(videoId, languageCode);
+            // Try to find native-language captions for better script fidelity
+            let preferredLanguageCode: string | undefined;
+            try {
+                const languages = await fetchAvailableLanguages(videoId);
+                if (languages && languages.length > 0) {
+                    // Prefer manual non-English captions, then any non-English captions
+                    const manualNonEnglish = languages.find(
+                        (l: { code: string; type: string }) => l.type !== 'auto-generated' && l.code !== 'en'
+                    );
+                    const anyNonEnglish = languages.find(
+                        (l: { code: string }) => l.code !== 'en'
+                    );
+                    preferredLanguageCode = (manualNonEnglish || anyNonEnglish)?.code;
+                }
+            } catch {
+                // Silently fall back to auto mode
+            }
+
+            const result = await fetchTranscript(videoId, preferredLanguageCode);
 
             // Handle pending status (AI generation)
             if (result.status === 'pending' && result.jobId) {
@@ -324,7 +340,7 @@ export const useVideoProcessing = () => {
                     script: '',
                     vocabulary: [],
                     grammar: [],
-                    detectedLanguage: selectedLanguageName || 'Unknown',
+                    detectedLanguage: 'Detecting...',
                     practiceSentences: [],
                     status: 'pending' as const,
                     jobId: result.jobId,
@@ -354,10 +370,7 @@ export const useVideoProcessing = () => {
             if (mountedRef.current) {
                 setProcessingStep('Analyzing content with AI...');
             }
-            const { vocabulary, grammar, detectedLanguage: aiDetectedLang } = await analyzeContentWithAI(transcript);
-
-            // Use selected language if available, otherwise use AI detected language
-            const finalLanguage = selectedLanguageName || aiDetectedLang;
+            const { vocabulary, grammar, detectedLanguage } = await analyzeContentWithAI(transcript);
 
             // Only generate practice sentences if we have vocabulary and grammar
             let practiceSentences: PracticeSentence[] = [];
@@ -365,7 +378,7 @@ export const useVideoProcessing = () => {
                 if (mountedRef.current) {
                     setProcessingStep('Generating practice sentences...');
                 }
-                practiceSentences = await generatePracticeSentences(vocabulary, grammar, finalLanguage);
+                practiceSentences = await generatePracticeSentences(vocabulary, grammar, detectedLanguage);
             }
 
             const project: AppProject = {
@@ -375,7 +388,7 @@ export const useVideoProcessing = () => {
                 script: transcript,
                 vocabulary,
                 grammar,
-                detectedLanguage: finalLanguage,
+                detectedLanguage,
                 practiceSentences,
                 status: 'completed' as const,
                 userId
@@ -383,7 +396,7 @@ export const useVideoProcessing = () => {
 
             toast({
                 title: "Video processed successfully!",
-                description: `Your lesson is ready for study. Language: ${finalLanguage}`,
+                description: `Your lesson is ready for study. Language: ${detectedLanguage}`,
             });
 
             return project;

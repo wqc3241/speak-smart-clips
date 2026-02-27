@@ -133,8 +133,8 @@ const Index = () => {
     } catch (e) { console.error('Unit generation trigger error:', e); }
   };
 
-  const handleProcessVideo = async (videoId: string, languageCode?: string, selectedLanguageName?: string) => {
-    const project = await processVideo(videoId, languageCode, selectedLanguageName, user?.id, async (updatedProject) => {
+  const handleProcessVideo = async (videoId: string) => {
+    const project = await processVideo(videoId, user?.id, async (updatedProject) => {
       // This callback is called when a pending project completes
       setCurrentProject((prev) =>
         prev?.jobId === updatedProject.jobId ? updatedProject : prev
