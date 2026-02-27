@@ -218,6 +218,7 @@ export const useConversation = (project: AppProject | null) => {
   }, [finalTranscript, processUserInput, stopListening]);
 
   // Stop STT while TTS is playing to prevent picking up AI's voice
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (isPlaying && isListening) {
       stopListening();
@@ -227,7 +228,15 @@ export const useConversation = (project: AppProject | null) => {
       setState(prev => ({ ...prev, status: 'listening', currentTranscript: '' }));
       prevFinalRef.current = '';
       resetTranscript();
-      startListening();
+
+      // Delay restart to let iOS release the audio session back to mic mode.
+      // Without this, recognition.start() silently fails on iOS after TTS.
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = setTimeout(() => {
+        if (mountedRef.current && stateStatusRef.current === 'listening') {
+          startListening();
+        }
+      }, 350);
     }
   }, [isPlaying, isListening, stopListening, startListening, resetTranscript]);
 
@@ -374,6 +383,7 @@ export const useConversation = (project: AppProject | null) => {
     return () => {
       mountedRef.current = false;
       stopListening();
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     };
   }, [stopListening]);
 

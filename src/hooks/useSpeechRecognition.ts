@@ -154,7 +154,28 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
         setFinalTranscript('');
       }
     } catch (e) {
-      console.error('Failed to start speech recognition:', e);
+      console.error('Failed to start speech recognition, retrying:', e);
+      // iOS may need a moment after audio playback before mic is available.
+      // Retry once after a short delay with a fresh instance.
+      setTimeout(() => {
+        if (!mountedRef.current || !shouldRestartRef.current) return;
+        try {
+          const retry = createRecognition();
+          if (!retry) return;
+          recognitionRef.current = retry;
+          retry.onresult = recognition.onresult;
+          retry.onerror = recognition.onerror;
+          retry.onend = recognition.onend;
+          retry.start();
+          if (mountedRef.current) {
+            setIsListening(true);
+            setTranscript('');
+            setFinalTranscript('');
+          }
+        } catch (retryErr) {
+          console.error('Speech recognition retry also failed:', retryErr);
+        }
+      }, 500);
     }
   }, [isSupported, createRecognition]);
 
