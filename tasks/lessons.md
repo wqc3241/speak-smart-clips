@@ -194,6 +194,31 @@ The YouTube Data API v3 has a daily quota limit per project. With a single API k
 
 ---
 
+## Remove Stale breaklingo.html — Single HTML Entry Point
+
+**Date:** 2026-02-27
+
+### Problem
+
+The project had two HTML files at the root: `index.html` and `breaklingo.html`. It was unclear which one was actively served in production, and both were being maintained in parallel (metadata updates, Google Analytics, etc.).
+
+### Investigation
+
+- `index.html` references `/src/main.tsx` — the standard Vite source entry point. `vite build` processes it and outputs `dist/index.html` with hashed asset bundles.
+- `breaklingo.html` had hardcoded compiled asset paths (`/assets/index-BylkylmJ.js`) from a Feb 9 build snapshot. These hashes were stale and never updated by the build pipeline.
+- No build script, hosting config, or code referenced `breaklingo.html`.
+- `breaklingo.html` was created in a manual "update production" commit and was never part of the automated Vite build flow.
+
+### Resolution
+
+Deleted `breaklingo.html`. `index.html` is the single source of truth.
+
+### Key Lesson
+
+> In a Vite project, `index.html` at the root is always the entry point. Avoid maintaining a second HTML file with hardcoded asset hashes — it will go stale immediately after the next build. If you need a production HTML snapshot for debugging, check `dist/index.html` instead (the actual build output).
+
+---
+
 ## Test Coverage Added (2026-02-27)
 
 ### `src/hooks/__tests__/usePersonalizedRecommendations.test.ts` (new file — 8 tests)
