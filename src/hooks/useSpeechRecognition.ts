@@ -56,17 +56,38 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     }
   }, []);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
     if (!isSupported) return;
 
-    // Stop existing instance
+    // Detach handlers from old instance BEFORE stopping it. On iOS,
+    // .stop() fires onend asynchronously. If the old onend fires after
+    // we've created a new instance (with shouldRestartRef = true), it
+    // would try to restart the OLD instance — creating two competing
+    // recognition instances that both silently fail on iOS.
     if (recognitionRef.current) {
+      recognitionRef.current.onresult = null;
+      recognitionRef.current.onerror = null;
+      recognitionRef.current.onend = null;
       try {
         recognitionRef.current.stop();
       } catch {
         // Ignore
       }
     }
+
+    // Warm up the microphone — forces iOS to switch the audio session
+    // from playback mode back to recording mode after TTS finishes.
+    // Without this, recognition.start() succeeds but captures no audio.
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(t => t.stop());
+      } catch {
+        // Not available or denied — continue, recognition.start() may still work
+      }
+    }
+
+    if (!mountedRef.current) return;
 
     const recognition = createRecognition();
     if (!recognition) return;

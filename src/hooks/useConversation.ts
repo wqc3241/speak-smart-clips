@@ -236,7 +236,7 @@ export const useConversation = (project: AppProject | null) => {
         if (mountedRef.current && stateStatusRef.current === 'listening') {
           startListening();
         }
-      }, 350);
+      }, 500);
     }
   }, [isPlaying, isListening, stopListening, startListening, resetTranscript]);
 

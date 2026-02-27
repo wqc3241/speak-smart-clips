@@ -141,6 +141,12 @@ export const useTextToSpeech = () => {
                     URL.revokeObjectURL(url);
                     currentObjectUrlRef.current = null;
                 }
+                // Release the audio resource so iOS frees the audio session
+                // for mic input. Null handlers first to prevent onerror firing.
+                audio.onended = null;
+                audio.onerror = null;
+                audio.removeAttribute('src');
+                audio.load();
                 if (mountedRef.current) {
                     setIsPlaying(false);
                     setCurrentText(null);
