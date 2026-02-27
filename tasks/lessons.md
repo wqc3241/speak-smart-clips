@@ -168,6 +168,32 @@ The `usePersonalizedRecommendations` hook called `youtube-search` (3 parallel AP
 
 ---
 
+## YouTube API Key Rotation on Quota Exceeded
+
+**Date:** 2026-02-27
+
+### Problem
+
+The YouTube Data API v3 has a daily quota limit per project. With a single API key, once the quota was exhausted, all search functionality (user searches + personalized recommendations) stopped working until the next day.
+
+### Changes
+
+| File | What Changed |
+|------|-------------|
+| `supabase/functions/youtube-search/index.ts` | Refactored to load multiple API keys (`YOUTUBE_API_KEY`, `YOUTUBE_API_KEY_2`, ..., up to `_10`). On each search request, tries keys sequentially. If one returns 403 (quota exceeded), automatically rotates to the next key. Non-quota errors (400, 401, etc.) fail immediately without rotation. |
+
+### Configuration
+
+- API keys are stored as Supabase secrets: `YOUTUBE_API_KEY` (primary), `YOUTUBE_API_KEY_2`, `YOUTUBE_API_KEY_3`, `YOUTUBE_API_KEY_4`
+- Each key belongs to a different Google Cloud project, giving independent quotas
+- Adding a new key only requires `supabase secrets set YOUTUBE_API_KEY_N=<key>` — no code change needed
+
+### Key Lesson
+
+> Keep the rotation logic in the edge function (server-side), not the client. This way all clients benefit from the failover transparently. Only rotate on 403 quota errors — other HTTP errors (auth failures, bad requests) are not key-specific and should fail fast.
+
+---
+
 ## Test Coverage Added (2026-02-27)
 
 ### `src/hooks/__tests__/usePersonalizedRecommendations.test.ts` (new file — 8 tests)
