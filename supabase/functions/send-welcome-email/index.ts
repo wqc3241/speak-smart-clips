@@ -109,7 +109,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'BreakLingo <onboarding@resend.dev>',
+        from: 'Tom Wang <tom.wang@breaklingo.com>',
         to: [userEmail],
         subject: 'Welcome to BreakLingo! 🎉 Your language learning journey starts now',
         html: emailHtml,
