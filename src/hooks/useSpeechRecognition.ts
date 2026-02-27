@@ -81,9 +81,21 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     if (navigator.mediaDevices?.getUserMedia) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const source = ctx.createMediaStreamSource(stream);
+          const gain = ctx.createGain();
+          gain.gain.value = 0;          // silent — no feedback
+          source.connect(gain);
+          gain.connect(ctx.destination); // forces iOS to route mic audio
+          await new Promise(r => setTimeout(r, 300));
+          source.disconnect();
+          await ctx.close().catch(() => {});
+        }
         stream.getTracks().forEach(t => t.stop());
       } catch {
-        // Not available or denied — continue, recognition.start() may still work
+        // Permission denied or API unavailable — continue, recognition may still work
       }
     }
 

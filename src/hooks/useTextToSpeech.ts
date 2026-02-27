@@ -5,6 +5,23 @@ import { useToast } from "@/hooks/use-toast";
 // Tiny silent WAV — used to "unlock" audio playback on iOS Safari
 const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
+/** Flush iOS out of playback-mode audio session so the mic can activate. */
+function releaseAudioSession() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start();
+    src.onended = () => ctx.close().catch(() => {});
+  } catch {
+    // Best-effort — non-critical
+  }
+}
+
 export const useTextToSpeech = () => {
     const [isPlaying, setIsPlaying] = useState(false);
     const { toast } = useToast();
@@ -147,6 +164,7 @@ export const useTextToSpeech = () => {
                 audio.onerror = null;
                 audio.removeAttribute('src');
                 audio.load();
+                releaseAudioSession();
                 if (mountedRef.current) {
                     setIsPlaying(false);
                     setCurrentText(null);
