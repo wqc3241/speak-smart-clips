@@ -38,6 +38,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ project }) =
     startConversation,
     stopConversation,
     sendTextMessage,
+    startRecording,
     transcript,
   } = useConversation(project);
 
@@ -59,7 +60,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ project }) =
 
   const statusLabel = () => {
     switch (state.status) {
-      case 'listening': return 'Listening...';
+      case 'listening': return isListening ? 'Listening...' : 'Tap mic to speak';
       case 'processing': return 'Thinking...';
       case 'speaking': return 'Speaking...';
       case 'error': return 'Error';
@@ -128,6 +129,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ project }) =
             setTextInput={setTextInput}
             handleSendText={handleSendText}
             stopConversation={stopConversation}
+            startRecording={startRecording}
             scrollRef={scrollRef}
           />
         )}
@@ -223,6 +225,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ project }) =
         setTextInput={setTextInput}
         handleSendText={handleSendText}
         stopConversation={stopConversation}
+        startRecording={startRecording}
         scrollRef={scrollRef}
       />
     </div>
@@ -242,6 +245,7 @@ interface ActiveConversationProps {
   setTextInput: (v: string) => void;
   handleSendText: () => void;
   stopConversation: () => void;
+  startRecording: () => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -256,6 +260,7 @@ const ActiveConversation: React.FC<ActiveConversationProps> = ({
   setTextInput,
   handleSendText,
   stopConversation,
+  startRecording,
   scrollRef,
 }) => (
   <Card className="flex flex-col h-[calc(100vh-220px)] md:h-[600px]">
@@ -319,13 +324,26 @@ const ActiveConversation: React.FC<ActiveConversationProps> = ({
     {/* Text input fallback */}
     <div className="p-3 border-t">
       <div className="flex gap-2">
-        <div className="shrink-0 flex items-center justify-center w-9 h-9">
-          {isListening ? (
-            <Mic className="w-5 h-5 text-green-500 animate-pulse" />
-          ) : (
+        {state.status === 'listening' && !isListening ? (
+          <button
+            onClick={startRecording}
+            aria-label="Start recording"
+            className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-primary text-primary-foreground ring-2 ring-primary/50 animate-pulse hover:ring-primary/80 transition-all"
+          >
+            <Mic className="w-5 h-5" />
+          </button>
+        ) : isListening ? (
+          <div
+            aria-label="Recording"
+            className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-green-500 text-white animate-pulse"
+          >
+            <Mic className="w-5 h-5" />
+          </div>
+        ) : (
+          <div className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-muted">
             <MicOff className="w-5 h-5 text-muted-foreground" />
-          )}
-        </div>
+          </div>
+        )}
         <Input
           placeholder="Type a message..."
           value={textInput}

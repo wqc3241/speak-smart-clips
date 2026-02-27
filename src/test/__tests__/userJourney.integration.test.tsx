@@ -272,20 +272,30 @@ vi.mock('@/hooks/useTextToSpeech', () => ({
 // If they're new on every render, useConversation's cleanup effect for
 // [stopListening] fires every render, setting mountedRef.current = false
 // before the isPlaying transition effect runs.
+//
+// Use a hoisted config ref so individual tests can switch to voice mode
+// (isSupported: true) and control isListening.
+const speechRecConfigRef = vi.hoisted(() => ({
+  isSupported: false,
+  isListening: false,
+}));
+
 vi.mock('@/hooks/useSpeechRecognition', () => {
   const startListening = vi.fn();
   const stopListening = vi.fn();
   const resetTranscript = vi.fn();
   return {
     useSpeechRecognition: () => ({
-      isListening: false,
-      isSupported: false,
+      isListening: speechRecConfigRef.isListening,
+      isSupported: speechRecConfigRef.isSupported,
       transcript: '',
       finalTranscript: '',
       startListening,
       stopListening,
       resetTranscript,
     }),
+    // Expose for direct assertions in tests
+    __mockStartListening: startListening,
   };
 });
 
@@ -856,6 +866,105 @@ describe('User Journey Integration', () => {
         'conversation-summary',
         expect.any(Object),
       );
+    }, 30000);
+  });
+
+  // ─── Phase 5b: Push-to-talk mic behavior (voice mode) ─────────
+
+  describe('Phase 5b: Push-to-talk mic behavior', () => {
+    let chatCallCount: number;
+
+    beforeEach(() => {
+      setupAuthenticatedUser();
+      localStorage.setItem('breaklingo-onboarding-complete', 'true');
+      chatCallCount = 0;
+
+      // Switch to voice mode for this test suite
+      speechRecConfigRef.isSupported = true;
+      speechRecConfigRef.isListening = false;
+
+      mockFunctionsInvoke.mockImplementation((fnName: string) => {
+        switch (fnName) {
+          case 'conversation-chat': {
+            const reply = CHAT_REPLIES[chatCallCount] || 'Default reply';
+            chatCallCount++;
+            return Promise.resolve({ data: { success: true, reply }, error: null });
+          }
+          case 'conversation-summary':
+            return Promise.resolve({ data: { success: true, summary: MOCK_SUMMARY }, error: null });
+          case 'send-welcome-email':
+            return Promise.resolve({ data: { success: true }, error: null });
+          default:
+            return Promise.resolve({ data: { success: true }, error: null });
+        }
+      });
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'projects') {
+          return createChainableFromMock({ data: [MOCK_DB_PROJECT], error: null, count: 1 });
+        }
+        if (table === 'learning_units') {
+          return createChainableFromMock({ data: MOCK_LEARNING_UNITS_DB, error: null });
+        }
+        return createChainableFromMock({ data: null, error: null });
+      });
+    });
+
+    afterEach(() => {
+      // Restore default (text-only) mode for other tests
+      speechRecConfigRef.isSupported = false;
+      speechRecConfigRef.isListening = false;
+    });
+
+    it('shows mic button after AI speaks and does not auto-start listening', async () => {
+      // Get the mock startListening function for assertions
+      const { __mockStartListening: mockStartListening } = await import('@/hooks/useSpeechRecognition') as unknown as { __mockStartListening: ReturnType<typeof vi.fn> };
+      mockStartListening.mockClear();
+
+      renderApp('/');
+
+      // Navigate to Talk tab
+      await waitFor(() => {
+        expect(screen.getByText('Learning Path')).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      const talkTab = screen.getByRole('tab', { name: /talk/i });
+      await user.click(talkTab);
+
+      // Select the project
+      await waitFor(() => {
+        expect(screen.getByText('Voice Conversation')).toBeInTheDocument();
+      });
+      const projectTitle = screen.getByText('Japanese Tennis Lesson');
+      await user.click(projectTitle);
+
+      // Start conversation (voice mode — isSupported is true)
+      const startBtn = await screen.findByRole('button', { name: /start conversation/i });
+      await user.click(startBtn);
+
+      // Wait for AI greeting
+      await waitFor(() => {
+        expect(screen.getByText(CHAT_REPLIES[0])).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      // After AI speaks, status should transition to 'listening'
+      // The mic button should be visible with "Tap mic to speak" label
+      await waitFor(() => {
+        expect(screen.getByText('Tap mic to speak')).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      // CRITICAL: startListening should NOT have been called automatically
+      expect(mockStartListening).not.toHaveBeenCalled();
+
+      // The mic button should be clickable
+      const micBtn = screen.getByRole('button', { name: /start recording/i });
+      expect(micBtn).toBeInTheDocument();
+
+      // Tap the mic button
+      await user.click(micBtn);
+
+      // Now startListening should have been called
+      expect(mockStartListening).toHaveBeenCalledTimes(1);
     }, 30000);
   });
 

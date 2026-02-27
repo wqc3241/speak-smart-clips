@@ -218,27 +218,17 @@ export const useConversation = (project: AppProject | null) => {
   }, [finalTranscript, processUserInput, stopListening]);
 
   // Stop STT while TTS is playing to prevent picking up AI's voice
-  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (isPlaying && isListening) {
       stopListening();
     }
     if (!isPlaying && stateStatusRef.current === 'speaking' && mountedRef.current) {
-      // TTS finished playing — go back to listening
+      // TTS finished playing — go back to listening status.
+      // User will tap the mic button to start recording (push-to-talk).
       setState(prev => ({ ...prev, status: 'listening', currentTranscript: '' }));
-      prevFinalRef.current = '';
       resetTranscript();
-
-      // Delay restart to let iOS release the audio session back to mic mode.
-      // Without this, recognition.start() silently fails on iOS after TTS.
-      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = setTimeout(() => {
-        if (mountedRef.current && stateStatusRef.current === 'listening') {
-          startListening();
-        }
-      }, 500);
     }
-  }, [isPlaying, isListening, stopListening, startListening, resetTranscript]);
+  }, [isPlaying, isListening, stopListening, resetTranscript]);
 
   const startConversation = useCallback(async () => {
     if (!project) return;
@@ -377,13 +367,20 @@ export const useConversation = (project: AppProject | null) => {
     processUserInput(text);
   }, [processUserInput, primeSpeaking]);
 
+  // Push-to-talk: user taps mic button to start recording
+  const startRecording = useCallback(() => {
+    if (stateStatusRef.current !== 'listening') return;
+    prevFinalRef.current = '';
+    resetTranscript();
+    startListening();
+  }, [startListening, resetTranscript]);
+
   // Cleanup on unmount
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       stopListening();
-      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     };
   }, [stopListening]);
 
@@ -397,6 +394,7 @@ export const useConversation = (project: AppProject | null) => {
     startConversation,
     stopConversation,
     sendTextMessage,
+    startRecording,
     transcript,
   };
 };
