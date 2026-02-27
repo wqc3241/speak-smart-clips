@@ -81,23 +81,40 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ project }) =
   if (!isSupported) {
     return (
       <div className="space-y-6">
-        <Card>
-          <CardContent className="py-12 text-center space-y-4">
-            <AlertTriangle className="w-12 h-12 mx-auto text-yellow-500" />
-            <h3 className="text-lg font-semibold">Speech Recognition Not Supported</h3>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Your browser doesn't support the Web Speech API. Please use Google Chrome or Microsoft Edge for voice conversations.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              You can still use the text input below to have a conversation.
-            </p>
-            {/* Allow text-only conversation */}
-            <Button onClick={startConversation} disabled={state.status !== 'idle'}>
-              <MessageCircle className="w-4 h-4 mr-2" />
-              Start Text Conversation
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Summary states (after a text-only conversation ends) */}
+        {state.status === 'idle' && isGeneratingSummary && (
+          <Card>
+            <CardContent className="py-12 text-center space-y-4">
+              <Loader2 className="w-10 h-10 animate-spin mx-auto text-primary" />
+              <p className="text-sm text-muted-foreground">Analyzing your conversation...</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {state.status === 'idle' && session && !isGeneratingSummary && (
+          <SessionSummaryCard session={session} onStartNew={() => startConversation()} />
+        )}
+
+        {/* Show start card only when idle with no summary */}
+        {(state.status !== 'idle' || (!session && !isGeneratingSummary)) && (
+          <Card>
+            <CardContent className="py-12 text-center space-y-4">
+              <AlertTriangle className="w-12 h-12 mx-auto text-yellow-500" />
+              <h3 className="text-lg font-semibold">Speech Recognition Not Supported</h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Your browser doesn't support the Web Speech API. Please use Google Chrome or Microsoft Edge for voice conversations.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                You can still use the text input below to have a conversation.
+              </p>
+              {/* Allow text-only conversation */}
+              <Button onClick={startConversation} disabled={state.status !== 'idle'}>
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Start Text Conversation
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {state.status !== 'idle' && (
           <ActiveConversation
