@@ -14,6 +14,7 @@ BreakLingo is a language learning platform that transforms YouTube videos into i
 | Backend | Supabase (PostgreSQL, Edge Functions, Auth) |
 | AI | Lovable AI Gateway (Gemini 3 Flash), OpenAI TTS, OpenAI Whisper STT |
 | APIs | YouTube Data API v3, Supadata (transcript extraction), Resend (email) |
+| Analytics | Google Analytics (gtag.js, G-8S1RC1PSP9) |
 
 ---
 
@@ -52,6 +53,7 @@ src/
 │   ├── useBrowserTTS.ts       # Browser native SpeechSynthesis
 │   ├── useSpeechRecognition.ts# Web Speech API wrapper (legacy, unused in conversation)
 │   ├── useYouTubeSearch.ts    # YouTube search via edge function
+│   ├── usePersonalizedRecommendations.ts # Personalized video recs with 24h per-user cache
 │   └── use-mobile.tsx         # Mobile breakpoint detection
 │
 ├── types/
@@ -164,7 +166,7 @@ AI-generated quiz units per project.
 
 | Function | Purpose | AI Model |
 |----------|---------|----------|
-| analyze-content | Extract vocabulary & grammar from transcript | Gemini 3 Flash (via Lovable Gateway) |
+| analyze-content | Extract vocabulary & grammar from transcript (bilingual-aware, romanized→native script) | Gemini 3 Flash (via Lovable Gateway) |
 | generate-practice-sentences | Create practice sentences from extracted content | Gemini 3 Flash |
 | generate-learning-units | Generate 10-40 quiz units with 9 question types | Gemini 3 Flash |
 | conversation-chat | AI conversation partner in target language | Gemini 3 Flash |
@@ -180,7 +182,7 @@ All AI functions use **structured output** via `tool_choice` (function calling) 
 | poll-transcript-job | Poll async transcript status | Supadata API |
 | generate-speech | Text-to-speech audio | OpenAI gpt-4o-mini-tts |
 | transcribe-audio | Speech-to-text transcription | OpenAI Whisper |
-| youtube-search | Search YouTube videos | YouTube Data API v3 |
+| youtube-search | Search YouTube videos (multi-key rotation on quota exceeded) | YouTube Data API v3 |
 | get-available-languages | List caption languages | YouTube Data API v3 |
 | send-welcome-email | Onboarding email | Resend API |
 
@@ -198,10 +200,17 @@ All AI functions use **structured output** via `tool_choice` (function calling) 
 ### Video Processing Pipeline
 
 ```
-User selects YouTube video
+User clicks YouTube video → processing starts immediately (no language selector)
     │
     ▼
-extract-transcript (Supadata API)
+get-available-languages (YouTube Data API)
+    │
+    ├─ Prefer manual non-English caption track
+    ├─ Fall back to any non-English track
+    └─ Fall back to auto mode (no languageCode)
+    │
+    ▼
+extract-transcript (Supadata API, with preferred languageCode if found)
     │
     ├─ Immediate: transcript returned
     │       │
@@ -316,7 +325,7 @@ useAuth checks Supabase session
 ## Key Hooks
 
 ### useVideoProcessing
-Orchestrates the entire video processing pipeline. Handles transcript extraction, AI analysis, practice sentence generation, and async job polling. Returns `processVideo()`, `regenerateAnalysis()`, and processing state.
+Orchestrates the entire video processing pipeline. Auto-selects the best caption track via `get-available-languages` (prefers manual non-English captions for native script fidelity), then extracts transcript, runs AI analysis, generates practice sentences, and handles async job polling. Language is always AI-detected — no manual language selection. Returns `processVideo(videoId)`, `regenerateAnalysis()`, and processing state.
 
 ### useConversation
 Manages AI conversation state. Integrates Whisper STT (input) and OpenAI TTS (output). Auto-pauses STT while TTS is playing to prevent echo. Uses `useWhisperSTT` (backed by `AudioManager` + OpenAI Whisper) as the universal STT provider on all platforms. Handles conversation start, stop, summary generation, and session storage.
@@ -326,6 +335,9 @@ CRUD operations for learning units. Fetches from DB, updates progress (best scor
 
 ### useAuth
 Manages authentication state with Supabase Auth. Supports dev auto-login via environment variables. Listens for auth state changes and provides user object + logout handler.
+
+### usePersonalizedRecommendations
+Fetches personalized video recommendations based on the user's search history. Calls `youtube-search` for up to 3 queries in parallel, deduplicates results by videoId. Results are cached in localStorage per user account (`speak-smart-clips:recommendations:{userId}`) with a 24-hour TTL. Cache is invalidated when search history changes or expires. Returns `{ recommendations, isLoading }`.
 
 ### useProject
 Manages current project state. Auto-saves to Supabase on project changes with insert/update detection (checks for existing youtube_url). Returns `currentProject`, `setCurrentProject`, `autoSaveProject`.
@@ -365,7 +377,8 @@ SUPABASE_URL                  # Auto-provided
 SUPABASE_ANON_KEY             # Auto-provided
 SUPABASE_SERVICE_ROLE_KEY     # Auto-provided
 LOVABLE_API_KEY               # Lovable AI Gateway key
-YOUTUBE_API_KEY               # YouTube Data API v3 key
+YOUTUBE_API_KEY               # YouTube Data API v3 key (primary)
+YOUTUBE_API_KEY_2 … _10       # Additional YouTube API keys for quota rotation (optional)
 SUPADATA_API_KEY              # Supadata transcript API key
 OPENAI_API_KEY                # OpenAI API key (for TTS and Whisper STT)
 RESEND_API_KEY                # Resend email API key
