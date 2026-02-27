@@ -1025,5 +1025,117 @@ describe('User Journey Integration', () => {
       expect(screen.getByText('2 units')).toBeInTheDocument();
       expect(screen.getAllByText('10 questions').length).toBeGreaterThanOrEqual(1);
     });
+
+    it('does not show "Generating" spinner when units exist but some projects are missing units', async () => {
+      // Override mockFrom: project B is completed but has no learning units
+      const MOCK_PROJECT_B = {
+        ...MOCK_DB_PROJECT,
+        id: 'proj-002',
+        title: 'Another Lesson',
+      };
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'projects') {
+          return createChainableFromMock({ data: [MOCK_DB_PROJECT, MOCK_PROJECT_B], error: null, count: 2 });
+        }
+        if (table === 'learning_units') {
+          // Only units for proj-001, NOT proj-002
+          return createChainableFromMock({ data: MOCK_LEARNING_UNITS_DB, error: null });
+        }
+        return createChainableFromMock({ data: null, error: null });
+      });
+
+      renderApp('/');
+
+      // Wait for learning units to load
+      await waitFor(() => {
+        expect(screen.getByText('Learning Path')).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      // Existing units should be shown immediately
+      expect(screen.getByText('Basic Tennis Vocabulary')).toBeInTheDocument();
+      expect(screen.getByText('Polite Match Phrases')).toBeInTheDocument();
+
+      // CRITICAL: "Generating Learning Units..." spinner should NOT appear
+      expect(screen.queryByText(/generating learning units/i)).not.toBeInTheDocument();
+    });
+  });
+
+  // ─── Phase 7: Projects Tab ───────────────────────────────────────
+
+  describe('Phase 7: Projects tab display', () => {
+    beforeEach(() => {
+      setupAuthenticatedUser();
+      localStorage.setItem('breaklingo-onboarding-complete', 'true');
+
+      mockFunctionsInvoke.mockImplementation((fnName: string) => {
+        if (fnName === 'send-welcome-email') {
+          return Promise.resolve({ data: { success: true }, error: null });
+        }
+        return Promise.resolve({ data: { success: true }, error: null });
+      });
+    });
+
+    it('renders project cards with action buttons and filters out empty projects', async () => {
+      const MOCK_EMPTY_PROJECT = {
+        id: 'proj-empty',
+        user_id: 'user-001',
+        title: null,
+        youtube_url: '',
+        script: null,
+        vocabulary: null,
+        grammar: null,
+        practice_sentences: null,
+        detected_language: null,
+        vocabulary_count: null,
+        grammar_count: null,
+        status: 'processing',
+        job_id: null,
+        error_message: null,
+        is_favorite: false,
+        last_accessed: '2025-06-01T00:00:00Z',
+        created_at: '2025-06-02T00:00:00Z',
+        updated_at: '2025-06-02T00:00:00Z',
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'projects') {
+          // Return both a valid project and an empty/processing project
+          return createChainableFromMock({
+            data: [MOCK_EMPTY_PROJECT, MOCK_DB_PROJECT],
+            error: null,
+            count: 2,
+          });
+        }
+        if (table === 'learning_units') {
+          return createChainableFromMock({ data: MOCK_LEARNING_UNITS_DB, error: null });
+        }
+        return createChainableFromMock({ data: null, error: null });
+      });
+
+      renderApp('/');
+
+      // Wait for the page to load
+      await waitFor(() => {
+        expect(screen.getByText('Learning Path')).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      // Navigate to Projects tab
+      const projectsTab = screen.getByRole('tab', { name: /projects/i });
+      await user.click(projectsTab);
+
+      // Wait for projects to load
+      await waitFor(() => {
+        expect(screen.getByText('Japanese Tennis Lesson')).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      // The valid project should show its action buttons
+      const openButtons = screen.getAllByRole('button', { name: /open/i });
+      expect(openButtons.length).toBeGreaterThanOrEqual(1);
+
+      // The empty/titleless project should NOT produce a card
+      // (only 1 project card should be visible, not 2)
+      const projectCards = screen.getAllByText(/words/);
+      expect(projectCards).toHaveLength(1);
+    });
   });
 });

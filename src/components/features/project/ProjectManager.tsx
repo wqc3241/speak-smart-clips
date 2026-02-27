@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Input } from "@/components/ui/input";
 import { History, Search, Star, Trash2, Eye, Loader2 } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
@@ -107,6 +107,7 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
   }, [fetchProjects]);
 
   const filteredProjects = projects.filter(project =>
+    project.title &&
     project.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -254,8 +255,8 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
           </CardContent>
         </Card>
       ) : (
-        <ScrollArea className="h-[calc(100vh-280px)] md:h-[600px]">
-          <div className="space-y-3 pr-4">
+        <div className="overflow-y-auto h-[calc(100dvh-280px)] md:h-[600px]">
+          <div className="space-y-3 pr-1">
             {filteredProjects.map((project) => (
               <Card key={project.id} className="border-border hover:border-primary/50 transition-colors">
                 <CardContent className="p-4">
@@ -291,34 +292,34 @@ export const ProjectManager: React.FC<ProjectManagerProps> = ({ onLoadProject })
                       variant="outline"
                       size="sm"
                       onClick={() => loadProject(project.id)}
-                      className="flex-1"
+                      className="flex-1 text-foreground"
                     >
-                      <Eye className="w-3.5 h-3.5 mr-2" />
+                      <Eye className="w-4 h-4 mr-2" />
                       Open
                     </Button>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
                       onClick={() => toggleFavorite(project.id)}
                     >
-                      <Star className={`w-3.5 h-3.5 ${
+                      <Star className={`w-4 h-4 ${
                         project.is_favorite ? 'text-yellow-500 fill-current' : 'text-muted-foreground'
                       }`} />
                     </Button>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
                       onClick={() => deleteProject(project.id)}
                       className="text-destructive hover:text-destructive"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
-        </ScrollArea>
+        </div>
       )}
     </div>
   );

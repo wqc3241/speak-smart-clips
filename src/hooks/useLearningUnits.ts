@@ -146,13 +146,15 @@ export const useLearningUnits = () => {
         if (!mountedRef.current) return;
 
         if (missingIds.length > 0) {
-          // Generate units for new projects in the background
+          // Generate units for new projects silently in the background.
+          // Don't call startPolling() — it sets isGenerating=true which shows
+          // the "Generating" spinner, hiding the units the user already has.
+          // New units will appear on next mount / tab switch.
           for (const projectId of missingIds) {
             supabase.functions.invoke('generate-learning-units', {
               body: { projectId },
             }).catch(e => console.error(`Failed to trigger generation for project ${projectId}:`, e));
           }
-          startPolling();
         }
         setIsLoading(false);
       }
