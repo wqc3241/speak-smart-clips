@@ -25,6 +25,24 @@ export const useTextToSpeech = () => {
         };
     }, []);
 
+    const stop = () => {
+        if (currentAudioRef.current) {
+            currentAudioRef.current.onended = null;
+            currentAudioRef.current.onerror = null;
+            currentAudioRef.current.pause();
+            currentAudioRef.current.src = '';
+            currentAudioRef.current = null;
+        }
+        if (currentObjectUrlRef.current) {
+            URL.revokeObjectURL(currentObjectUrlRef.current);
+            currentObjectUrlRef.current = null;
+        }
+        if (mountedRef.current) {
+            setIsPlaying(false);
+            setCurrentText(null);
+        }
+    };
+
     const speak = async (text: string, voice: string = 'coral', instructions?: string) => {
         try {
             // If clicking the same button that's playing, stop it
@@ -133,5 +151,5 @@ export const useTextToSpeech = () => {
         }
     };
 
-    return { speak, isPlaying, currentText };
+    return { speak, stop, isPlaying, currentText };
 };

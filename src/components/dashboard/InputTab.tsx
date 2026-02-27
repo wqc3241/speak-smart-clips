@@ -3,8 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from 'lucide-react';
-import { LearningPath } from "@/components/features/learning/LearningPath";
-import { QuizInterface } from "@/components/features/learning/QuizInterface";
 import { VideoDiscovery } from "@/components/features/video/VideoDiscovery";
 
 interface InputTabProps {
@@ -23,8 +21,6 @@ export const InputTab: React.FC<InputTabProps> = ({
     const [showLanguageSelector, setShowLanguageSelector] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState<string>('');
     const [pendingVideoId, setPendingVideoId] = useState<string>('');
-
-    const [activeQuiz, setActiveQuiz] = useState<{ unitId: number } | null>(null);
 
     const handleVideoSelected = (videoId: string) => {
         setPendingVideoId(videoId);
@@ -54,16 +50,6 @@ export const InputTab: React.FC<InputTabProps> = ({
         const languageCode = languageCodeMap[selectedLanguage];
         await onProcessVideo(pendingVideoId, languageCode, selectedLanguage);
     };
-
-    if (activeQuiz) {
-        return (
-            <QuizInterface
-                unitId={activeQuiz.unitId}
-                onComplete={() => setActiveQuiz(null)}
-                onExit={() => setActiveQuiz(null)}
-            />
-        );
-    }
 
     return (
         <div className="space-y-6">
@@ -145,8 +131,6 @@ export const InputTab: React.FC<InputTabProps> = ({
                 </Card>
             )}
 
-            {/* Duolingo-style Learning Path */}
-            <LearningPath onStartLesson={(unitId) => setActiveQuiz({ unitId })} />
         </div>
     );
 };

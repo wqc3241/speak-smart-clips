@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { Youtube, BookOpen, MessageCircle, History, Loader2, Mic } from 'lucide-react';
+import { Youtube, BookOpen, MessageCircle, History, Loader2, Mic, MoreHorizontal, GraduationCap } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useVideoProcessing } from "@/hooks/useVideoProcessing";
@@ -13,12 +14,16 @@ import { InputTab } from "@/components/dashboard/InputTab";
 import { StudyTab } from "@/components/dashboard/StudyTab";
 import { PracticeInterface } from "@/components/features/practice/PracticeInterface";
 import { ProjectManager } from "@/components/features/project/ProjectManager";
-import { ConversationMode } from "@/components/features/conversation/ConversationMode";
+import { TalkTab } from "@/components/features/conversation/TalkTab";
+import { LearningPath } from "@/components/features/learning/LearningPath";
+import { OnboardingGuide } from "@/components/features/onboarding/OnboardingGuide";
+import { supabase } from "@/integrations/supabase/client";
 import { TEST_TRANSCRIPT, TEST_VIDEO_TITLE, TEST_VIDEO_URL } from "@/lib/constants";
 import type { AppProject, PracticeSentence } from "@/types/project";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('input');
+  const [defaultTabResolved, setDefaultTabResolved] = useState(false);
   const navigate = useNavigate();
   const { user, isCheckingAuth, handleLogout } = useAuth();
 
@@ -27,6 +32,22 @@ const Index = () => {
       navigate("/auth", { replace: true });
     }
   }, [isCheckingAuth, user, navigate]);
+
+  // Set default tab: 'learn' if user has projects, 'input' for new users
+  useEffect(() => {
+    if (!user || defaultTabResolved) return;
+    const checkProjects = async () => {
+      const { count } = await supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      if (count && count > 0) {
+        setActiveTab('learn');
+      }
+      setDefaultTabResolved(true);
+    };
+    checkProjects();
+  }, [user, defaultTabResolved]);
   const {
     isProcessing,
     processingStep,
@@ -100,17 +121,35 @@ const Index = () => {
     }
   };
 
+  const triggerUnitGeneration = async (projectUrl: string) => {
+    if (!user?.id) return;
+    try {
+      const { data: saved } = await supabase.from('projects').select('id')
+        .eq('youtube_url', projectUrl).eq('user_id', user.id).single();
+      if (saved?.id) {
+        supabase.functions.invoke('generate-learning-units', { body: { projectId: saved.id } })
+          .catch(console.error);
+      }
+    } catch (e) { console.error('Unit generation trigger error:', e); }
+  };
+
   const handleProcessVideo = async (videoId: string, languageCode?: string, selectedLanguageName?: string) => {
-    const project = await processVideo(videoId, languageCode, selectedLanguageName, user?.id, (updatedProject) => {
+    const project = await processVideo(videoId, languageCode, selectedLanguageName, user?.id, async (updatedProject) => {
       // This callback is called when a pending project completes
       setCurrentProject((prev) =>
         prev?.jobId === updatedProject.jobId ? updatedProject : prev
       );
+      if (updatedProject.status === 'completed') {
+        triggerUnitGeneration(updatedProject.url);
+      }
     });
     if (project) {
       handleProjectCreated(project);
-      // Auto-save immediately (works for both completed and pending projects)
       await autoSaveProject(project);
+
+      if (project.status === 'completed') {
+        triggerUnitGeneration(project.url);
+      }
     }
   };
 
@@ -144,6 +183,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-8">
+      <OnboardingGuide />
       <Header user={user} onLogout={handleLogout} />
 
       <main className="container mx-auto px-4 py-6 md:py-8">
@@ -154,7 +194,11 @@ const Index = () => {
                 <TabsList className="grid h-auto grid-cols-1 gap-1 bg-muted/70 p-1">
                   <TabsTrigger value="input" className="justify-start gap-2">
                     <Youtube className="w-4 h-4" />
-                    <span>Input</span>
+                    <span>Search</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="learn" className="justify-start gap-2">
+                    <GraduationCap className="w-4 h-4" />
+                    <span>Learn</span>
                   </TabsTrigger>
                   <TabsTrigger value="lesson" className="justify-start gap-2">
                     <BookOpen className="w-4 h-4" />
@@ -206,6 +250,12 @@ const Index = () => {
                 </ErrorBoundary>
               </TabsContent>
 
+              <TabsContent value="learn" className="mt-0">
+                <ErrorBoundary>
+                  <LearningPath />
+                </ErrorBoundary>
+              </TabsContent>
+
               <TabsContent value="lesson" className="mt-0">
                 <ErrorBoundary>
                   <StudyTab
@@ -247,21 +297,7 @@ const Index = () => {
 
               <TabsContent value="talk" className="mt-0 space-y-4 md:space-y-6">
                 <ErrorBoundary>
-                  {currentProject ? (
-                    <ConversationMode project={currentProject} />
-                  ) : (
-                    <Card className="text-center py-16 border-none shadow-none">
-                      <CardContent>
-                        <Mic className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                        <h3 className="text-lg font-semibold text-muted-foreground mb-2">
-                          No lesson for conversation
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Complete a lesson first to start a voice conversation
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )}
+                  <TalkTab />
                 </ErrorBoundary>
               </TabsContent>
 
@@ -277,33 +313,24 @@ const Index = () => {
 
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t z-20">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-4">
           <button
-            aria-label="Input tab"
+            aria-label="Search tab"
             onClick={() => setActiveTab('input')}
             className={`flex flex-col items-center gap-1 py-3 ${activeTab === 'input' ? 'text-primary' : 'text-muted-foreground'
               }`}
           >
             <Youtube className="w-5 h-5" />
-            <span className="text-xs">Input</span>
+            <span className="text-xs">Search</span>
           </button>
           <button
-            aria-label="Study tab"
-            onClick={() => setActiveTab('lesson')}
-            className={`flex flex-col items-center gap-1 py-3 ${activeTab === 'lesson' ? 'text-primary' : 'text-muted-foreground'
+            aria-label="Learn tab"
+            onClick={() => setActiveTab('learn')}
+            className={`flex flex-col items-center gap-1 py-3 ${activeTab === 'learn' ? 'text-primary' : 'text-muted-foreground'
               }`}
           >
-            <BookOpen className="w-5 h-5" />
-            <span className="text-xs">Study</span>
-          </button>
-          <button
-            aria-label="Practice tab"
-            onClick={() => setActiveTab('conversation')}
-            className={`flex flex-col items-center gap-1 py-3 ${activeTab === 'conversation' ? 'text-primary' : 'text-muted-foreground'
-              }`}
-          >
-            <MessageCircle className="w-5 h-5" />
-            <span className="text-xs">Practice</span>
+            <GraduationCap className="w-5 h-5" />
+            <span className="text-xs">Learn</span>
           </button>
           <button
             aria-label="Talk tab"
@@ -314,15 +341,44 @@ const Index = () => {
             <Mic className="w-5 h-5" />
             <span className="text-xs">Talk</span>
           </button>
-          <button
-            aria-label="Projects tab"
-            onClick={() => setActiveTab('projects')}
-            className={`flex flex-col items-center gap-1 py-3 ${activeTab === 'projects' ? 'text-primary' : 'text-muted-foreground'
-              }`}
-          >
-            <History className="w-5 h-5" />
-            <span className="text-xs">Projects</span>
-          </button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                aria-label="More options"
+                className={`flex flex-col items-center gap-1 py-3 ${['lesson', 'conversation', 'projects'].includes(activeTab) ? 'text-primary' : 'text-muted-foreground'
+                  }`}
+              >
+                <MoreHorizontal className="w-5 h-5" />
+                <span className="text-xs">More</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" side="top" className="w-48 p-1 mb-1">
+              <button
+                onClick={() => setActiveTab('lesson')}
+                className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm ${activeTab === 'lesson' ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-muted'
+                  }`}
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>Study</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('conversation')}
+                className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm ${activeTab === 'conversation' ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-muted'
+                  }`}
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Practice</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('projects')}
+                className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm ${activeTab === 'projects' ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-muted'
+                  }`}
+              >
+                <History className="w-4 h-4" />
+                <span>Projects</span>
+              </button>
+            </PopoverContent>
+          </Popover>
         </div>
       </nav>
     </div>

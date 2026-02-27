@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useBrowserTTS } from '@/hooks/useBrowserTTS';
+import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { languageToBCP47, isStopPhrase } from '@/lib/languageUtils';
 import { saveSession } from '@/lib/conversationStorage';
@@ -32,7 +32,21 @@ export const useConversation = (project: AppProject | null) => {
 
   const { toast } = useToast();
   const bcp47 = project ? languageToBCP47(project.detectedLanguage) : 'en-US';
-  const { speak, stop: stopSpeaking, isPlaying } = useBrowserTTS({ language: bcp47 });
+  const { speak: openaiSpeak, stop: stopSpeaking, isPlaying } = useTextToSpeech();
+
+  // Wrap OpenAI TTS to pass language-appropriate voice instructions
+  const speakRef = useRef<(text: string) => Promise<void>>();
+  speakRef.current = async (text: string) => {
+    const lang = project?.detectedLanguage || 'English';
+    await openaiSpeak(
+      text,
+      'coral',
+      `Speak naturally in ${lang}, like a friendly and patient language tutor having a casual conversation. Use a warm, encouraging tone.`
+    );
+  };
+  const speak = useCallback(async (text: string) => {
+    await speakRef.current?.(text);
+  }, []);
 
   // Keep refs in sync
   useEffect(() => {
@@ -140,14 +154,22 @@ export const useConversation = (project: AppProject | null) => {
         text: reply,
         timestamp: new Date().toISOString(),
       };
+
+      // Generate audio first (keep showing "processing" state), then show text when audio starts
+      try {
+        await speak(reply);
+      } catch (ttsError) {
+        console.error('TTS error:', ttsError);
+        // Continue — show text even if audio fails
+      }
+
+      if (!mountedRef.current) return;
+
       setState(prev => ({
         ...prev,
         messages: [...prev.messages, aiMsg],
         status: 'speaking',
       }));
-
-      // Speak the reply — useEffect will restart STT when TTS finishes
-      await speak(reply);
     } catch (error) {
       if (!mountedRef.current) return;
       const msg = error instanceof Error ? error.message : 'Something went wrong';
@@ -239,15 +261,21 @@ export const useConversation = (project: AppProject | null) => {
         timestamp: new Date().toISOString(),
       };
 
+      // Generate audio first (keep showing "processing" state), then show text when audio starts
+      try {
+        await speak(reply);
+      } catch (ttsError) {
+        console.error('TTS error:', ttsError);
+      }
+
+      if (!mountedRef.current) return;
+
       setState({
         status: 'speaking',
         messages: [aiMsg],
         currentTranscript: '',
         error: null,
       });
-
-      // Speak opening — useEffect will switch to listening when TTS finishes
-      await speak(reply);
     } catch (error) {
       if (!mountedRef.current) return;
       const msg = error instanceof Error ? error.message : 'Failed to start conversation';

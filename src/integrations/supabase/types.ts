@@ -14,6 +14,68 @@ export type Database = {
   }
   public: {
     Tables: {
+      learning_units: {
+        Row: {
+          id: string
+          project_id: string
+          user_id: string
+          unit_number: number
+          title: string
+          description: string | null
+          difficulty: string
+          questions: Json
+          question_count: number | null
+          is_completed: boolean | null
+          best_score: number | null
+          attempts: number | null
+          stars: number | null
+          last_attempted_at: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          user_id: string
+          unit_number: number
+          title: string
+          description?: string | null
+          difficulty?: string
+          questions?: Json
+          question_count?: number | null
+          is_completed?: boolean | null
+          best_score?: number | null
+          attempts?: number | null
+          stars?: number | null
+          last_attempted_at?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          user_id?: string
+          unit_number?: number
+          title?: string
+          description?: string | null
+          difficulty?: string
+          questions?: Json
+          question_count?: number | null
+          is_completed?: boolean | null
+          best_score?: number | null
+          attempts?: number | null
+          stars?: number | null
+          last_attempted_at?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_units_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -101,6 +163,51 @@ export type Database = {
           vocabulary?: Json
           vocabulary_count?: number | null
           youtube_url?: string
+        }
+        Relationships: []
+      }
+      user_feedback: {
+        Row: {
+          id: string
+          user_id: string | null
+          user_email: string | null
+          category: string | null
+          message: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          user_email?: string | null
+          category?: string | null
+          message: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          user_email?: string | null
+          category?: string | null
+          message?: string
+          created_at?: string | null
+        }
+        Relationships: []
+      }
+      user_profiles: {
+        Row: {
+          id: string
+          welcome_email_sent: boolean | null
+          first_login_at: string | null
+        }
+        Insert: {
+          id: string
+          welcome_email_sent?: boolean | null
+          first_login_at?: string | null
+        }
+        Update: {
+          id?: string
+          welcome_email_sent?: boolean | null
+          first_login_at?: string | null
         }
         Relationships: []
       }

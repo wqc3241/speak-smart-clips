@@ -22,6 +22,8 @@ project_id = "evmamwdmwogmlezndueg"
 
 [functions.submit-feedback]
 
+[functions.generate-learning-units]
+
 [functions.test-apis]
  
  [functions.migrate-project-titles]
