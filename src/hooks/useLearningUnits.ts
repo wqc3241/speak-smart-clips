@@ -51,18 +51,31 @@ export const useLearningUnits = () => {
     }
   }, [user]);
 
-  // Check if user has projects (to know if units are expected)
-  const checkHasProjects = useCallback(async (): Promise<boolean> => {
-    if (!user) return false;
+  // Get completed project IDs that don't yet have learning units
+  const getProjectsMissingUnits = useCallback(async (): Promise<string[]> => {
+    if (!user) return [];
     try {
-      const { count } = await supabase
+      // Get all completed project IDs
+      const { data: projects } = await supabase
         .from('projects')
-        .select('id', { count: 'exact', head: true })
+        .select('id')
         .eq('user_id', user.id)
         .eq('status', 'completed');
-      return (count ?? 0) > 0;
+
+      if (!projects || projects.length === 0) return [];
+
+      // Get project IDs that already have learning units
+      const { data: existing } = await supabase
+        .from('learning_units')
+        .select('project_id')
+        .eq('user_id', user.id);
+
+      const existingProjectIds = new Set((existing || []).map(u => u.project_id));
+      return projects
+        .map(p => p.id)
+        .filter(id => !existingProjectIds.has(id));
     } catch {
-      return false;
+      return [];
     }
   }, [user]);
 
@@ -85,8 +98,8 @@ export const useLearningUnits = () => {
         return;
       }
 
-      // Keep polling up to 12 times (60s total at 5s intervals)
-      if (pollCountRef.current < 12) {
+      // Keep polling up to 24 times (120s total at 5s intervals)
+      if (pollCountRef.current < 24) {
         pollTimerRef.current = setTimeout(poll, 5000);
       } else {
         setIsGenerating(false);
@@ -106,21 +119,47 @@ export const useLearningUnits = () => {
       if (!mountedRef.current) return;
 
       if (fetched.length === 0) {
-        // No units — check if user has projects
-        const hasProjects = await checkHasProjects();
-        if (hasProjects) {
-          // Projects exist but no units — likely generating, start polling
+        // No units — check for projects missing units and trigger generation
+        const missingIds = await getProjectsMissingUnits();
+        if (!mountedRef.current) return;
+
+        if (missingIds.length > 0) {
+          // Trigger generation for all projects that need it
+          setIsGenerating(true);
+          for (const projectId of missingIds) {
+            try {
+              await supabase.functions.invoke('generate-learning-units', {
+                body: { projectId },
+              });
+            } catch (e) {
+              console.error(`Failed to trigger generation for project ${projectId}:`, e);
+            }
+          }
+          // Now poll for results
           startPolling();
         } else {
           setIsLoading(false);
         }
       } else {
+        // Have some units, but check if any projects are still missing units
+        const missingIds = await getProjectsMissingUnits();
+        if (!mountedRef.current) return;
+
+        if (missingIds.length > 0) {
+          // Generate units for new projects in the background
+          for (const projectId of missingIds) {
+            supabase.functions.invoke('generate-learning-units', {
+              body: { projectId },
+            }).catch(e => console.error(`Failed to trigger generation for project ${projectId}:`, e));
+          }
+          startPolling();
+        }
         setIsLoading(false);
       }
     };
 
     init();
-  }, [fetchUnits, checkHasProjects, startPolling]);
+  }, [fetchUnits, getProjectsMissingUnits, startPolling]);
 
   const updateUnitProgress = useCallback(async (
     unitId: string,
