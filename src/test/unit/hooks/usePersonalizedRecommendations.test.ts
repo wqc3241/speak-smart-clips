@@ -57,7 +57,7 @@ describe('usePersonalizedRecommendations', () => {
   });
 
   it('returns empty recommendations when search history is empty', async () => {
-    const { usePersonalizedRecommendations } = await import('../usePersonalizedRecommendations');
+    const { usePersonalizedRecommendations } = await import('@/hooks/usePersonalizedRecommendations');
     const { result } = renderHook(() => usePersonalizedRecommendations([]));
 
     expect(result.current.recommendations).toEqual([]);
@@ -70,7 +70,7 @@ describe('usePersonalizedRecommendations', () => {
       data: { results: MOCK_VIDEOS },
     });
 
-    const { usePersonalizedRecommendations } = await import('../usePersonalizedRecommendations');
+    const { usePersonalizedRecommendations } = await import('@/hooks/usePersonalizedRecommendations');
     const { result } = renderHook(() =>
       usePersonalizedRecommendations(['japanese greetings'])
     );
@@ -88,7 +88,7 @@ describe('usePersonalizedRecommendations', () => {
     const queriesKey = 'japanese greetings';
     localStorage.setItem(CACHE_KEY, buildCacheEntry(queriesKey, MOCK_VIDEOS));
 
-    const { usePersonalizedRecommendations } = await import('../usePersonalizedRecommendations');
+    const { usePersonalizedRecommendations } = await import('@/hooks/usePersonalizedRecommendations');
     const { result } = renderHook(() =>
       usePersonalizedRecommendations(['japanese greetings'])
     );
@@ -110,7 +110,7 @@ describe('usePersonalizedRecommendations', () => {
       data: { results: MOCK_VIDEOS },
     });
 
-    const { usePersonalizedRecommendations } = await import('../usePersonalizedRecommendations');
+    const { usePersonalizedRecommendations } = await import('@/hooks/usePersonalizedRecommendations');
     const { result } = renderHook(() =>
       usePersonalizedRecommendations(['japanese greetings'])
     );
@@ -131,7 +131,7 @@ describe('usePersonalizedRecommendations', () => {
       data: { results: MOCK_VIDEOS_BATCH2 },
     });
 
-    const { usePersonalizedRecommendations } = await import('../usePersonalizedRecommendations');
+    const { usePersonalizedRecommendations } = await import('@/hooks/usePersonalizedRecommendations');
     const { result } = renderHook(() =>
       usePersonalizedRecommendations(['new query'])
     );
@@ -150,7 +150,7 @@ describe('usePersonalizedRecommendations', () => {
       .mockResolvedValueOnce({ data: { results: [MOCK_VIDEOS[0], MOCK_VIDEOS[1]] } })
       .mockResolvedValueOnce({ data: { results: MOCK_VIDEOS_BATCH2 } });
 
-    const { usePersonalizedRecommendations } = await import('../usePersonalizedRecommendations');
+    const { usePersonalizedRecommendations } = await import('@/hooks/usePersonalizedRecommendations');
     const { result } = renderHook(() =>
       usePersonalizedRecommendations(['query one', 'query two'])
     );
@@ -172,7 +172,7 @@ describe('usePersonalizedRecommendations', () => {
       data: { results: MOCK_VIDEOS },
     });
 
-    const { usePersonalizedRecommendations } = await import('../usePersonalizedRecommendations');
+    const { usePersonalizedRecommendations } = await import('@/hooks/usePersonalizedRecommendations');
     const { result } = renderHook(() =>
       usePersonalizedRecommendations(['japanese greetings'])
     );
@@ -196,7 +196,7 @@ describe('usePersonalizedRecommendations', () => {
       data: { results: MOCK_VIDEOS.slice(0, 1) },
     });
 
-    const { usePersonalizedRecommendations } = await import('../usePersonalizedRecommendations');
+    const { usePersonalizedRecommendations } = await import('@/hooks/usePersonalizedRecommendations');
     renderHook(() =>
       usePersonalizedRecommendations(['q1', 'q2', 'q3', 'q4', 'q5'])
     );

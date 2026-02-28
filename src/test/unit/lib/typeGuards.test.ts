@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isVocabularyArray, isGrammarArray, isPracticeSentenceArray, toJson } from '../typeGuards';
+import { isVocabularyArray, isGrammarArray, isPracticeSentenceArray, toJson } from '@/lib/typeGuards';
 
 describe('isVocabularyArray', () => {
   it('returns true for valid vocabulary arrays', () => {

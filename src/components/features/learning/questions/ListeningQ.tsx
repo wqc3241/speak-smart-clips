@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Volume2, CheckCircle2, XCircle } from 'lucide-react';
+import { Volume2, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { languageToBCP47 } from '@/lib/languageUtils';
+import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import type { QuizQuestion } from '@/types/quiz';
 
 interface Props {
@@ -16,17 +16,20 @@ export const ListeningQ: React.FC<Props> = ({ question, onAnswer, language }) =>
   const [showResult, setShowResult] = useState(false);
   const [hasPlayed, setHasPlayed] = useState(false);
 
+  const { speak, isPlaying, stop } = useTextToSpeech();
+
   const isCorrect = selected === question.correctAnswer;
   const audioText = question.audioText || question.correctAnswer || '';
-  const bcp47 = language ? languageToBCP47(language) : 'en-US';
+  const lang = language || 'English';
 
   const handlePlay = useCallback(() => {
-    const utterance = new SpeechSynthesisUtterance(audioText);
-    utterance.lang = bcp47;
-    utterance.rate = 0.85;
-    speechSynthesis.speak(utterance);
+    if (isPlaying) {
+      stop();
+      return;
+    }
+    speak(audioText, 'coral', `Speak clearly and naturally in ${lang}, at a moderate pace suitable for language learners.`);
     setHasPlayed(true);
-  }, [audioText, bcp47]);
+  }, [audioText, lang, isPlaying, speak, stop]);
 
   const handleSelect = (option: string) => {
     if (showResult) return;
@@ -47,7 +50,7 @@ export const ListeningQ: React.FC<Props> = ({ question, onAnswer, language }) =>
           size="lg"
           className="rounded-full w-20 h-20 border-2 border-primary hover:bg-primary/10"
         >
-          <Volume2 className="w-8 h-8 text-primary" />
+          {isPlaying ? <Loader2 className="w-8 h-8 text-primary animate-spin" /> : <Volume2 className="w-8 h-8 text-primary" />}
         </Button>
       </div>
 

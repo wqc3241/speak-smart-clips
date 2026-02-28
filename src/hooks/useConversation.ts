@@ -191,6 +191,7 @@ export const useConversation = (project: AppProject | null) => {
     isListening, isSupported, transcript, finalTranscript,
     startListening, stopListening, resetTranscript,
     initMic: whisperInitMic, destroyMic: whisperDestroyMic,
+    refreshMic: whisperRefreshMic,
   } = useWhisperSTT({ language: bcp47 });
 
   // Update current transcript in state
@@ -216,10 +217,14 @@ export const useConversation = (project: AppProject | null) => {
       stopListening('tts-playing');
     }
     if (!isPlaying && stateStatusRef.current === 'speaking' && mountedRef.current) {
+      // On iOS, TTS playback switches the hardware audio session to
+      // "playback" mode, causing the mic stream to produce silence.
+      // Re-acquire the stream so the next recording captures real audio.
+      whisperRefreshMic().catch(() => {});
       setState(prev => ({ ...prev, status: 'listening', currentTranscript: '' }));
       resetTranscript();
     }
-  }, [isPlaying, isListening, stopListening, resetTranscript]);
+  }, [isPlaying, isListening, stopListening, resetTranscript, whisperRefreshMic]);
 
   const startConversation = useCallback(async () => {
     if (!project) return;

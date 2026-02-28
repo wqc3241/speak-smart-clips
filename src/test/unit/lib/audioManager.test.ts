@@ -43,7 +43,7 @@ describe('AudioManager', () => {
     vi.clearAllMocks();
     // Reset the singleton by re-importing
     vi.resetModules();
-    const mod = await import('../../lib/audioManager');
+    const mod = await import('@/lib/audioManager');
     AudioManager = mod.AudioManager;
   });
 

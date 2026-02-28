@@ -370,7 +370,7 @@ REMINDER: Every multiple_choice, tell_meaning, translation, fill_blank, and list
         ],
         tools: [toolSchema],
         tool_choice: { type: "function", function: { name: "generate_units" } },
-        max_tokens: 16000,
+        max_tokens: 32000,
       }),
     });
 
@@ -414,10 +414,83 @@ REMINDER: Every multiple_choice, tell_meaning, translation, fill_blank, and list
 
   const units = result.units || [];
 
-  // Post-process: strictly validate questions — remove any with missing required data
+  // Sanitize option text — remove JSON artifacts from garbled AI output
+  function sanitizeOptionText(text: string): string {
+    return text
+      .replace(/\],?\s*(question|correctAnswer|options|type|id)\s*:/gi, '')
+      // Remove leaked JSON field names (word:, meaning:, pairs:, etc.)
+      .replace(/\.{0,3}\s*(word|meaning|pairs|question|correctAnswer|options|type|id)\s*:\s*$/gi, '')
+      .replace(/\s*(word|meaning)\s*:\s*$/gi, '')
+      .replace(/^\[|\]$/g, '')
+      .replace(/,\s*$/, '')
+      .replace(/["{}[\]]+\s*$/g, '')
+      .trim();
+  }
+
+  // Post-process: normalize type names and keys from AI variations
+  for (const unit of units) {
+    for (const q of unit.questions || []) {
+      // AI sometimes generates "match_pair" instead of "match_pairs"
+      if (q.type === 'match_pair') {
+        q.type = 'match_pairs';
+      }
+      // AI sometimes uses "pair" key instead of "pairs"
+      if ((q as any).pair && !q.pairs) {
+        q.pairs = (q as any).pair;
+        delete (q as any).pair;
+      }
+    }
+  }
+
+  // Sanitize ALL text fields across all question types
+  for (const unit of units) {
+    for (const q of unit.questions || []) {
+      // String fields
+      for (const field of ['question', 'correctAnswer', 'targetText', 'audioText', 'originalText'] as const) {
+        if ((q as any)[field] && typeof (q as any)[field] === 'string') {
+          (q as any)[field] = sanitizeOptionText((q as any)[field]);
+        }
+      }
+      // Array-of-string fields
+      if (q.options) {
+        q.options = q.options.map(sanitizeOptionText);
+      }
+      if (q.correctAnswers) {
+        q.correctAnswers = q.correctAnswers.map(sanitizeOptionText);
+      }
+      if (q.jumbledWords) {
+        q.jumbledWords = q.jumbledWords.map(sanitizeOptionText);
+      }
+      if (q.correctOrder) {
+        q.correctOrder = q.correctOrder.map(sanitizeOptionText);
+      }
+      // Pairs (match_pairs)
+      if (q.pairs) {
+        for (const pair of q.pairs) {
+          pair.word = sanitizeOptionText(pair.word);
+          pair.meaning = sanitizeOptionText(pair.meaning);
+        }
+      }
+    }
+  }
+
+  // Strictly validate questions — remove any with missing required data or garbled content
   for (const unit of units) {
     const before = unit.questions.length;
     unit.questions = (unit.questions || []).filter(q => {
+      // Reject options that contain JSON syntax artifacts even after sanitization
+      if (q.options) {
+        const hasGarbled = q.options.some(opt =>
+          /\]\s*,?\s*(question|correctAnswer|type|id)\s*:/.test(opt) ||
+          opt.includes('interim],') ||
+          opt.includes('interim,') && opt.includes(':')
+        );
+        if (hasGarbled) {
+          console.warn(`Removing ${q.type} question ${q.id}: garbled option text`);
+          return false;
+        }
+      }
+
       // Types that require correctAnswer + options
       if (['multiple_choice', 'translation', 'fill_blank', 'tell_meaning', 'listening'].includes(q.type)) {
         if (!q.correctAnswer || !q.options || q.options.length === 0) {

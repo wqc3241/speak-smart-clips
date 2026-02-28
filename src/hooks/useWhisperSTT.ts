@@ -14,6 +14,10 @@ import { AudioManager } from '@/lib/audioManager';
 
 interface WhisperSTTOptions {
   language?: string;
+  /** How long silence must last after speech before auto-stop (default 1500 ms) */
+  silenceDurationMs?: number;
+  /** How long to wait for any speech before auto-stop (default 8000 ms) */
+  noSpeechTimeoutMs?: number;
 }
 
 export const useWhisperSTT = (options: WhisperSTTOptions = {}) => {
@@ -51,6 +55,12 @@ export const useWhisperSTT = (options: WhisperSTTOptions = {}) => {
     pushDebugEvent('whisper: mic destroyed');
   }, [pushDebugEvent]);
 
+  /** Re-acquire mic stream after TTS playback (iOS audio session fix). */
+  const refreshMic = useCallback(async () => {
+    await mgr.current.refreshStream();
+    pushDebugEvent('whisper: mic stream refreshed');
+  }, [pushDebugEvent]);
+
   const stopListening = useCallback(
     (reason: string = 'manual') => {
       pushDebugEvent('whisper: stopListening', { reason });
@@ -65,7 +75,11 @@ export const useWhisperSTT = (options: WhisperSTTOptions = {}) => {
         setIsListening(false);
 
         if (blob.size < 1000) {
-          pushDebugEvent('whisper: audio too short, skipping');
+          pushDebugEvent('whisper: audio too short, skipping', { bytes: blob.size });
+          setTranscript("Didn't catch that — try again");
+          setTimeout(() => {
+            if (mountedRef.current) setTranscript('');
+          }, 2000);
           return;
         }
         if (transcribingRef.current) return;
@@ -105,8 +119,12 @@ export const useWhisperSTT = (options: WhisperSTTOptions = {}) => {
           if (text && mountedRef.current) {
             setTranscript('');
             setFinalTranscript(text);
-          } else {
-            setTranscript('');
+          } else if (mountedRef.current) {
+            // Show brief feedback so user knows to try again
+            setTranscript("Didn't catch that — try again");
+            setTimeout(() => {
+              if (mountedRef.current) setTranscript('');
+            }, 2000);
           }
         } catch (e) {
           pushDebugEvent('whisper: transcribe error', {
@@ -137,17 +155,34 @@ export const useWhisperSTT = (options: WhisperSTTOptions = {}) => {
       setTranscript('');
       setFinalTranscript('');
 
-      const started = mgr.current.startCapture(() => {
-        // Silence detected → auto-stop
+      const onSilence = () => {
         pushDebugEvent('whisper: silence detected, auto-stop');
         stopListening('silence');
-      });
+      };
+
+      const captureOpts = {
+        silenceDurationMs: optionsRef.current.silenceDurationMs,
+        noSpeechTimeoutMs: optionsRef.current.noSpeechTimeoutMs,
+      };
+
+      let started = mgr.current.startCapture(onSilence, captureOpts);
+
+      // If startCapture returned false and state fell back to idle,
+      // the audio track likely died (OS sleep, backgrounding, etc.).
+      // Re-init the mic and retry once.
+      if (!started && mgr.current.getState() === 'idle') {
+        pushDebugEvent('whisper: track died, re-initing mic');
+        const ok = await mgr.current.init();
+        if (ok) {
+          started = mgr.current.startCapture(onSilence, captureOpts);
+        }
+      }
 
       if (started) {
         setIsListening(true);
         pushDebugEvent('whisper: recording started');
       } else {
-        pushDebugEvent('whisper: startCapture returned false');
+        pushDebugEvent('whisper: startCapture returned false', { state: mgr.current.getState() });
       }
     },
     [pushDebugEvent, stopListening],
@@ -176,5 +211,6 @@ export const useWhisperSTT = (options: WhisperSTTOptions = {}) => {
     debugEvents,
     initMic,
     destroyMic,
+    refreshMic,
   };
 };

@@ -27,7 +27,7 @@ describe('useTextToSpeech', () => {
   });
 
   it('initializes with isPlaying false', async () => {
-    const { useTextToSpeech } = await import('../useTextToSpeech');
+    const { useTextToSpeech } = await import('@/hooks/useTextToSpeech');
     const { result } = renderHook(() => useTextToSpeech());
 
     expect(result.current.isPlaying).toBe(false);
@@ -35,7 +35,7 @@ describe('useTextToSpeech', () => {
   });
 
   it('cleans up audio on unmount', async () => {
-    const { useTextToSpeech } = await import('../useTextToSpeech');
+    const { useTextToSpeech } = await import('@/hooks/useTextToSpeech');
     const { unmount } = renderHook(() => useTextToSpeech());
 
     // Unmounting should not throw
@@ -46,7 +46,7 @@ describe('useTextToSpeech', () => {
   });
 
   it('returns speak function', async () => {
-    const { useTextToSpeech } = await import('../useTextToSpeech');
+    const { useTextToSpeech } = await import('@/hooks/useTextToSpeech');
     const { result } = renderHook(() => useTextToSpeech());
 
     expect(typeof result.current.speak).toBe('function');

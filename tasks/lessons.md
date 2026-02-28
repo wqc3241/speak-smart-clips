@@ -239,3 +239,194 @@ Deleted `breaklingo.html`. `index.html` is the single source of truth.
 - Falls back to auto mode when only English captions are available
 - Uses AI-detected language directly (no manual override)
 - Sets `detectedLanguage` to "Detecting..." for pending transcript jobs
+
+---
+
+## iOS AudioContext Must Be Awaited Before AnalyserNode Works
+
+**Date**: 2026-02-28
+**Severity**: Critical (voice input completely broken on iOS)
+
+### Symptom
+
+On iOS, the mic button shows "listening" state, but the system never detects voice input. After 20-30 seconds, the browser revokes mic permission. Debug console shows AnalyserNode reading all zeros.
+
+### Root Cause
+
+`AudioContext` starts in `suspended` state on iOS WebKit. In `setupSilenceDetection()`, `audioCtx.resume()` was called but NOT awaited — the AnalyserNode was created and started polling before the AudioContext was actually running. Result: all audio samples read as 128 (silence), silence detection never fires, the no-speech fallback didn't exist, so the mic just stayed open until the browser killed it.
+
+### Solution
+
+Restructured `setupSilenceDetection()` to:
+1. Check `audioCtx.state === 'suspended'` and call `.resume().then(startAnalysis)` — analysis ONLY begins after resume completes
+2. Added 8-second no-speech-detected fallback (if analyser reads all zeros for 8s, auto-stop)
+3. Added 60-second max recording safety timer
+
+### Key Lesson
+
+> On iOS, `AudioContext.resume()` is **async** and MUST complete before any AnalyserNode reads valid data. Never assume AudioContext is running — always check state and await resume. Additionally, always add fallback timeouts so that if silence detection fails, the recording still gets processed.
+
+### Pattern to Remember
+
+- Always check `audioCtx.state` before using AnalyserNode — if `'suspended'`, await `.resume()` first
+- Silence detection should have THREE safety layers: (1) RMS-based silence after speech, (2) no-speech timeout, (3) max recording duration
+
+---
+
+## iOS TTS Playback Switches Hardware Audio Session, Killing Mic Stream
+
+**Date**: 2026-02-28
+**Severity**: Critical (voice input broken after first AI response)
+
+### Symptom
+
+In Talk mode, voice input works on the first turn. After AI speaks (TTS via HTMLAudioElement), the mic appears active but records silence. Voice never detected again without page refresh.
+
+### Root Cause
+
+On iOS, playing audio through an `HTMLAudioElement` switches the hardware audio session from "record" to "playback" mode. The existing `MediaStream` from `getUserMedia` becomes effectively muted — the audio tracks are still `live` (readyState is fine) but produce zero samples. iOS does NOT emit any error or event indicating this happened.
+
+### Solution
+
+Added `AudioManager.refreshStream()` method that:
+1. Stops all tracks on the old stream (`track.stop()`)
+2. Re-acquires `getUserMedia` with the same audio constraints
+3. Mutes the new stream (ready for next recording)
+
+Called from `useConversation.ts` when TTS playback ends (`isPlaying` transitions from true to false while in 'speaking' state).
+
+### Key Lesson
+
+> On iOS, after ANY audio playback through HTMLAudioElement, the existing getUserMedia stream will produce silence. You MUST re-acquire the stream via a fresh `getUserMedia` call. There is no iOS event that signals this — you just have to know to do it.
+
+### Pattern to Remember
+
+- After TTS/audio playback on iOS → always call `refreshStream()` before recording
+- Track `readyState` is NOT a reliable indicator of audio capture health on iOS — a "live" track can still produce zeros
+- Build this into the conversation flow: TTS ends → refresh mic → begin listening
+
+---
+
+## Gemini AI Produces Garbled JSON in Function-Call Output
+
+**Date**: 2026-02-28
+**Severity**: Medium (corrupted quiz content)
+
+### Symptom
+
+Quiz options contained artifacts like "Outside interim,", "Itself interim],question:", "beautiful word:". JSON structural tokens leaked into text fields.
+
+### Root Cause
+
+Two compounding issues:
+1. **Garbled output**: `google/gemini-3-flash-preview` occasionally produces malformed JSON in function-call responses — JSON keys and structure (`],question:`, `type:`, `word:`) leak into string values
+2. **Truncation**: `max_tokens: 16000` was too low for large batches (5 units x 10 questions), causing mid-JSON truncation that the parser partially recovered from
+
+### Solution
+
+Three-layer defense in `generate-learning-units/index.ts`:
+1. **Sanitization**: `sanitizeOptionText()` strips JSON artifacts (`],question:`, `word:`, `meaning:`, trailing brackets/commas) from ALL text fields (options, correctAnswer, question, targetText, audioText, pairs[].word, pairs[].meaning)
+2. **Detection**: Filter out questions where options still contain garbled patterns after sanitization
+3. **Prevention**: Increased `max_tokens` from 16000 to 32000
+
+Also added normalization for AI type/key variations (`match_pair` → `match_pairs`, `pair` → `pairs`).
+
+### Key Lesson
+
+> Never trust AI-generated structured output to be well-formed. Always sanitize ALL text fields in post-processing, not just the ones you've seen corrupted so far. AI models can produce garbled output in ANY field.
+
+### Pattern to Remember
+
+- Sanitize every text field, not just `options` — `question`, `correctAnswer`, `pairs[].word`, `pairs[].meaning`, etc.
+- Check for both the specific artifacts you've seen AND general JSON syntax patterns
+- Normalize type names and key names for known AI variations (e.g., singular vs plural)
+- Always set generous `max_tokens` for structured JSON output — truncation mid-JSON is worse than wasted tokens
+
+---
+
+## Native Browser TTS Is Robotic — Use OpenAI TTS Everywhere
+
+**Date**: 2026-02-28
+**Severity**: Low (UX quality)
+
+### Symptom
+
+"Listen" buttons in Read After Me and Listening quiz questions used native `speechSynthesis` API which sounds robotic and unnatural, especially for non-English languages.
+
+### Solution
+
+Replaced `new SpeechSynthesisUtterance()` + `speechSynthesis.speak()` with the existing `useTextToSpeech` hook (OpenAI TTS via `generate-speech` edge function) in both:
+- `ReadAfterMeQ.tsx`
+- `ListeningQ.tsx`
+
+Added language-appropriate voice instructions and loading/playing state indicators.
+
+### Key Lesson
+
+> When you already have a high-quality TTS solution (`useTextToSpeech` with OpenAI), use it consistently across the entire app. Don't leave some components on the inferior native API.
+
+---
+
+## useSpeechRecognition Is Unreliable on iOS — Use Whisper STT
+
+**Date**: 2026-02-28
+**Severity**: High (voice input broken on iOS for quiz)
+
+### Symptom
+
+In Read After Me questions, tapping the mic button for the first time didn't detect voice input. The component used `useSpeechRecognition` (native browser API) which has the same iOS WebKit bugs as in Talk mode.
+
+### Solution
+
+Switched `ReadAfterMeQ.tsx` from `useSpeechRecognition` to `useWhisperSTT` — the same Whisper-based STT that works reliably in Talk mode. Also fixed the mic button icons (see below).
+
+### Key Lesson
+
+> If native `SpeechRecognition` is broken in one context (Talk mode), it's broken everywhere on iOS. Don't use it in any component. Always use the Whisper STT fallback on all platforms for consistency.
+
+---
+
+## MicOff Icon During Recording Is Confusing
+
+**Date**: 2026-02-28
+**Severity**: Low (UX confusion)
+
+### Symptom
+
+The mic button showed a `MicOff` (crossed-out microphone) icon on a red button when actively recording. Users interpreted this as "mic is disabled" rather than "currently recording, tap to stop."
+
+### Solution
+
+Changed the icon states:
+- **Not recording**: `Mic` icon + "Tap to speak" label
+- **Recording**: `Square` (stop) icon + pulsing red button + "Tap to stop" label + "Recording... Speak now" banner
+- **Processing**: `Loader2` spinner + "Processing..." label
+
+### Key Lesson
+
+> Use a **Stop** icon (square) during recording, not a crossed-out mic. The crossed-out mic universally means "mic is off/muted" — the opposite of the intended meaning. Always add text labels below icon-only buttons to eliminate ambiguity.
+
+---
+
+## Configurable Silence Detection for Different Recording Contexts
+
+**Date**: 2026-02-28
+**Severity**: Medium (long sentences cut off)
+
+### Symptom
+
+In Read After Me questions with long sentences, the recording stopped before the user finished speaking. Natural pauses between phrases (1-2 seconds) triggered the 1.5-second silence detector.
+
+### Root Cause
+
+Silence detection timing was hardcoded at 1500ms for all contexts. Conversation (Talk) mode needs snappy auto-stop (user says one sentence, then waits for AI). Read After Me mode needs more tolerance because users pause to read, think, and pronounce difficult words.
+
+### Solution
+
+Made `AudioManager.startCapture()` accept optional `{ silenceDurationMs, noSpeechTimeoutMs }` parameters, with defaults of 1500ms / 8000ms (unchanged for Talk mode). `useWhisperSTT` passes these through from its options.
+
+ReadAfterMeQ uses: `silenceDurationMs: 2500` (2.5s), `noSpeechTimeoutMs: 15000` (15s).
+
+### Key Lesson
+
+> Silence detection thresholds are context-dependent. A value that works for conversational turn-taking is too aggressive for read-aloud exercises. Make timing configurable at the hook level so each component can tune behavior for its use case.

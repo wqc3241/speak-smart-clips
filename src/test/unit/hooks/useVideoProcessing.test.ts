@@ -30,7 +30,7 @@ describe('useVideoProcessing', () => {
   });
 
   it('initializes with isProcessing false', async () => {
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { result } = renderHook(() => useVideoProcessing());
 
     expect(result.current.isProcessing).toBe(false);
@@ -40,7 +40,7 @@ describe('useVideoProcessing', () => {
   it('cleans up polling intervals on unmount', async () => {
     const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
 
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { unmount } = renderHook(() => useVideoProcessing());
 
     unmount();
@@ -50,7 +50,7 @@ describe('useVideoProcessing', () => {
   });
 
   it('extracts video IDs correctly', async () => {
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { result } = renderHook(() => useVideoProcessing());
 
     expect(result.current.extractVideoId('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
@@ -59,7 +59,7 @@ describe('useVideoProcessing', () => {
   });
 
   it('provides cleanup function', async () => {
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { result } = renderHook(() => useVideoProcessing());
 
     expect(typeof result.current.cleanup).toBe('function');
@@ -80,7 +80,7 @@ describe('useVideoProcessing — language auto-detection', () => {
   });
 
   it('processVideo accepts only (videoId, userId, onProjectUpdate) — no languageCode param', async () => {
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { result } = renderHook(() => useVideoProcessing());
 
     // processVideo should have 3 params max (videoId, userId?, onProjectUpdate?)
@@ -129,7 +129,7 @@ describe('useVideoProcessing — language auto-detection', () => {
       return Promise.resolve({ data: null, error: null });
     });
 
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { result } = renderHook(() => useVideoProcessing());
 
     await act(async () => {
@@ -177,7 +177,7 @@ describe('useVideoProcessing — language auto-detection', () => {
       return Promise.resolve({ data: { sentences: [] }, error: null });
     });
 
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { result } = renderHook(() => useVideoProcessing());
 
     await act(async () => {
@@ -210,7 +210,7 @@ describe('useVideoProcessing — language auto-detection', () => {
       return Promise.resolve({ data: { sentences: [] }, error: null });
     });
 
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { result } = renderHook(() => useVideoProcessing());
 
     await act(async () => {
@@ -251,7 +251,7 @@ describe('useVideoProcessing — language auto-detection', () => {
       return Promise.resolve({ data: { sentences: [] }, error: null });
     });
 
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { result } = renderHook(() => useVideoProcessing());
 
     await act(async () => {
@@ -288,7 +288,7 @@ describe('useVideoProcessing — language auto-detection', () => {
       return Promise.resolve({ data: { sentences: [] }, error: null });
     });
 
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { result } = renderHook(() => useVideoProcessing());
 
     let project: unknown;
@@ -319,7 +319,7 @@ describe('useVideoProcessing — language auto-detection', () => {
       return Promise.resolve({ data: null, error: null });
     });
 
-    const { useVideoProcessing } = await import('../useVideoProcessing');
+    const { useVideoProcessing } = await import('@/hooks/useVideoProcessing');
     const { result } = renderHook(() => useVideoProcessing());
 
     let project: unknown;

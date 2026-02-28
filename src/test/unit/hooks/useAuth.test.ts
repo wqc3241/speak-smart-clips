@@ -41,7 +41,7 @@ describe('useAuth', () => {
   });
 
   it('checks session on mount', async () => {
-    const { useAuth } = await import('../useAuth');
+    const { useAuth } = await import('@/hooks/useAuth');
     const { result } = renderHook(() => useAuth());
 
     await waitFor(() => {
@@ -54,7 +54,7 @@ describe('useAuth', () => {
   });
 
   it('subscribes to auth changes and unsubscribes on unmount', async () => {
-    const { useAuth } = await import('../useAuth');
+    const { useAuth } = await import('@/hooks/useAuth');
     const { unmount } = renderHook(() => useAuth());
 
     expect(mockOnAuthStateChange).toHaveBeenCalled();
@@ -71,7 +71,7 @@ describe('useAuth', () => {
     };
     mockGetSession.mockResolvedValue({ data: { session: mockSession } });
 
-    const { useAuth } = await import('../useAuth');
+    const { useAuth } = await import('@/hooks/useAuth');
     const { result } = renderHook(() => useAuth());
 
     await waitFor(() => {
@@ -83,7 +83,7 @@ describe('useAuth', () => {
   });
 
   it('does not auto-login when DEV_TEST_MODE is false', async () => {
-    const { useAuth } = await import('../useAuth');
+    const { useAuth } = await import('@/hooks/useAuth');
     renderHook(() => useAuth());
 
     await waitFor(() => {

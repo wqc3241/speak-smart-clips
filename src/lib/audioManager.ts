@@ -21,9 +21,14 @@ class AudioManager {
   private analyser: AnalyserNode | null = null;
   private audioCtx: AudioContext | null = null;
   private silenceCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private sourceNode: MediaStreamAudioSourceNode | null = null;
+  private maxRecordingTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Callbacks
   private onSilenceDetected: (() => void) | null = null;
+  // Configurable silence detection timing
+  private silenceDurationMs = 1500;
+  private noSpeechTimeoutMs = 8_000;
 
   static getInstance(): AudioManager {
     if (!_instance) {
@@ -64,13 +69,49 @@ class AudioManager {
   }
 
   /**
-   * Start recording audio. Un-mutes the mic and begins MediaRecorder capture.
-   * @param onSilence — called when ~1.5 s of silence is detected after speech
+   * Force re-acquire the mic stream. On iOS, TTS playback switches the
+   * hardware audio session to "playback" mode, causing the existing
+   * MediaStream to produce silence. Call this after TTS finishes to
+   * ensure the next recording captures real audio.
    */
-  startCapture(onSilence?: () => void): boolean {
+  async refreshStream(): Promise<void> {
+    if (!this.stream) return;
+    try {
+      // Stop old tracks and re-acquire
+      this.stream.getTracks().forEach((t) => t.stop());
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      this.muteStream();
+      console.log('[AudioManager] Stream refreshed after TTS');
+    } catch {
+      console.warn('[AudioManager] Failed to refresh stream');
+    }
+  }
+
+  /**
+   * Start recording audio. Un-mutes the mic and begins MediaRecorder capture.
+   * @param onSilence — called when silence is detected after speech
+   * @param opts — optional overrides for silence detection timing
+   */
+  startCapture(onSilence?: () => void, opts?: { silenceDurationMs?: number; noSpeechTimeoutMs?: number }): boolean {
     if (!this.stream || this.state === 'recording') return false;
 
+    // Check track health — track may have died (OS event, sleep, etc.)
+    const track = this.stream.getAudioTracks()[0];
+    if (!track || track.readyState === 'ended') {
+      this.stream = null;
+      this.state = 'idle';
+      return false;
+    }
+
     this.onSilenceDetected = onSilence ?? null;
+    this.silenceDurationMs = opts?.silenceDurationMs ?? 1500;
+    this.noSpeechTimeoutMs = opts?.noSpeechTimeoutMs ?? 8_000;
     this.chunks = [];
     this.unmuteStream();
 
@@ -113,7 +154,14 @@ class AudioManager {
         this.state = 'ready';
         resolve(blob);
       };
-      this.recorder.stop();
+      try {
+        this.recorder.stop();
+      } catch {
+        // recorder.stop() can throw if track ended unexpectedly
+        this.recorder = null;
+        this.state = 'ready';
+        resolve(new Blob(this.chunks, { type: this.chunks[0]?.type || 'audio/webm' }));
+      }
     });
   }
 
@@ -153,55 +201,98 @@ class AudioManager {
   private setupSilenceDetection(): void {
     if (!this.stream) return;
 
+    // Safety net: max recording duration prevents indefinite mic hold
+    // (browser may revoke permission after ~30 s of open mic)
+    const MAX_RECORDING_MS = 60_000;
+    this.maxRecordingTimer = setTimeout(() => {
+      if (this.state === 'recording') {
+        this.onSilenceDetected?.();
+      }
+    }, MAX_RECORDING_MS);
+
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!this.audioCtx || this.audioCtx.state === 'closed') {
         this.audioCtx = new AudioCtx();
       }
-      if (this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume().catch(() => {});
+
+      // Disconnect previous source node to prevent leaked audio nodes
+      if (this.sourceNode) {
+        this.sourceNode.disconnect();
+        this.sourceNode = null;
       }
 
-      const source = this.audioCtx.createMediaStreamSource(this.stream);
-      this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = 512;
-      source.connect(this.analyser);
+      const startAnalysis = () => {
+        if (!this.stream || !this.audioCtx || this.state !== 'recording') return;
 
-      const buffer = new Uint8Array(this.analyser.frequencyBinCount);
-      let speechDetected = false;
-      const SILENCE_THRESHOLD = 15; // RMS below this = silence
-      const SILENCE_DURATION_MS = 1500;
+        this.sourceNode = this.audioCtx.createMediaStreamSource(this.stream);
+        this.analyser = this.audioCtx.createAnalyser();
+        this.analyser.fftSize = 512;
+        this.sourceNode.connect(this.analyser);
 
-      this.silenceCheckInterval = setInterval(() => {
-        if (!this.analyser) return;
-        this.analyser.getByteTimeDomainData(buffer);
+        const buffer = new Uint8Array(this.analyser.frequencyBinCount);
+        let speechDetected = false;
+        const SILENCE_THRESHOLD = 15; // RMS below this = silence
+        const silenceDuration = this.silenceDurationMs;
+        const recordingStartedAt = Date.now();
+        const noSpeechTimeout = this.noSpeechTimeoutMs;
 
-        // Compute RMS
-        let sum = 0;
-        for (let i = 0; i < buffer.length; i++) {
-          const v = (buffer[i] - 128) / 128;
-          sum += v * v;
-        }
-        const rms = Math.sqrt(sum / buffer.length) * 100;
+        this.silenceCheckInterval = setInterval(() => {
+          if (!this.analyser) return;
+          this.analyser.getByteTimeDomainData(buffer);
 
-        if (rms > SILENCE_THRESHOLD) {
-          speechDetected = true;
-          if (this.silenceTimer) {
-            clearTimeout(this.silenceTimer);
-            this.silenceTimer = null;
+          // Compute RMS
+          let sum = 0;
+          for (let i = 0; i < buffer.length; i++) {
+            const v = (buffer[i] - 128) / 128;
+            sum += v * v;
           }
-        } else if (speechDetected && !this.silenceTimer) {
-          this.silenceTimer = setTimeout(() => {
+          const rms = Math.sqrt(sum / buffer.length) * 100;
+
+          if (rms > SILENCE_THRESHOLD) {
+            speechDetected = true;
+            if (this.silenceTimer) {
+              clearTimeout(this.silenceTimer);
+              this.silenceTimer = null;
+            }
+          } else if (speechDetected && !this.silenceTimer) {
+            this.silenceTimer = setTimeout(() => {
+              this.onSilenceDetected?.();
+            }, silenceDuration);
+          }
+
+          // Fallback: if no speech detected for a long time, the analyser
+          // may not be receiving audio data (e.g. AudioContext issue).
+          // Auto-stop so the recording still gets processed.
+          if (!speechDetected && Date.now() - recordingStartedAt > noSpeechTimeout) {
             this.onSilenceDetected?.();
-          }, SILENCE_DURATION_MS);
-        }
-      }, 100);
+          }
+        }, 100);
+      };
+
+      // CRITICAL: On iOS, AudioContext starts suspended and must be
+      // resumed before the AnalyserNode can receive audio data.
+      // We must wait for resume() to complete before starting analysis,
+      // otherwise the analyser reads all zeros and silence detection
+      // never triggers — causing the mic to stay open indefinitely.
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().then(startAnalysis).catch(() => {
+          // Resume failed — start analysis anyway as best-effort
+          startAnalysis();
+        });
+      } else {
+        startAnalysis();
+      }
     } catch {
       // Silence detection is best-effort; if it fails, user uses manual stop
     }
   }
 
   private teardownSilenceDetection(): void {
+    if (this.maxRecordingTimer) {
+      clearTimeout(this.maxRecordingTimer);
+      this.maxRecordingTimer = null;
+    }
     if (this.silenceCheckInterval) {
       clearInterval(this.silenceCheckInterval);
       this.silenceCheckInterval = null;
@@ -210,6 +301,12 @@ class AudioManager {
       clearTimeout(this.silenceTimer);
       this.silenceTimer = null;
     }
+    // Disconnect source node to prevent leaked audio nodes
+    if (this.sourceNode) {
+      this.sourceNode.disconnect();
+      this.sourceNode = null;
+    }
+    this.analyser = null;
     // Don't close audioCtx here — reuse across recordings
   }
 }

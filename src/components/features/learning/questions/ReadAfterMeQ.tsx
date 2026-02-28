@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, MicOff, Volume2 } from 'lucide-react';
+import { Mic, Square, Volume2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { useWhisperSTT } from '@/hooks/useWhisperSTT';
+import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { languageToBCP47 } from '@/lib/languageUtils';
 import type { QuizQuestion } from '@/types/quiz';
 
@@ -26,6 +27,7 @@ export const ReadAfterMeQ: React.FC<Props> = ({ question, onAnswer, language }) 
   const [showResult, setShowResult] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [userSpeech, setUserSpeech] = useState('');
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const processedRef = useRef(false);
 
   const bcp47 = language ? languageToBCP47(language) : question.targetLanguage || 'en-US';
@@ -38,38 +40,47 @@ export const ReadAfterMeQ: React.FC<Props> = ({ question, onAnswer, language }) 
     startListening,
     stopListening,
     resetTranscript,
-  } = useSpeechRecognition({
-    language: bcp47,
-    continuous: false,
-    interimResults: true,
-  });
+    initMic,
+    destroyMic,
+  } = useWhisperSTT({ language: bcp47, silenceDurationMs: 2500, noSpeechTimeoutMs: 15_000 });
+
+  const { speak, isPlaying, stop } = useTextToSpeech();
 
   const targetText = question.targetText || question.question;
+  const lang = language || 'English';
 
-  // Use browser TTS to pronounce the target text
+  // Track when transcription is in progress (between stop and result)
+  useEffect(() => {
+    if (transcript === '...') {
+      setIsTranscribing(true);
+    } else if (transcript !== '...') {
+      setIsTranscribing(false);
+    }
+  }, [transcript]);
+
   const handlePlayAudio = useCallback(() => {
-    const utterance = new SpeechSynthesisUtterance(targetText);
-    utterance.lang = bcp47;
-    utterance.rate = 0.85;
-    speechSynthesis.speak(utterance);
-  }, [targetText, bcp47]);
+    if (isPlaying) {
+      stop();
+      return;
+    }
+    speak(targetText, 'coral', `Speak clearly and slowly in ${lang}, like a language tutor demonstrating pronunciation.`);
+  }, [targetText, lang, isPlaying, speak, stop]);
 
-  const handleToggleMic = useCallback(() => {
+  const handleToggleMic = useCallback(async () => {
     if (isListening) {
-      stopListening();
+      stopListening('manual');
     } else {
       processedRef.current = false;
       resetTranscript();
       setUserSpeech('');
-      startListening();
+      await startListening('mic-button');
     }
   }, [isListening, startListening, stopListening, resetTranscript]);
 
-  // Process final transcript
+  // Process final transcript from Whisper
   useEffect(() => {
     if (finalTranscript && !processedRef.current && !showResult) {
       processedRef.current = true;
-      stopListening();
       setUserSpeech(finalTranscript);
 
       const score = similarity(finalTranscript, targetText);
@@ -78,7 +89,14 @@ export const ReadAfterMeQ: React.FC<Props> = ({ question, onAnswer, language }) 
       setShowResult(true);
       onAnswer(passed);
     }
-  }, [finalTranscript, targetText, onAnswer, stopListening, showResult]);
+  }, [finalTranscript, targetText, onAnswer, showResult]);
+
+  // Cleanup mic on unmount
+  useEffect(() => {
+    return () => {
+      destroyMic();
+    };
+  }, [destroyMic]);
 
   return (
     <div>
@@ -88,31 +106,49 @@ export const ReadAfterMeQ: React.FC<Props> = ({ question, onAnswer, language }) 
       <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-lg text-center">
         <p className="text-2xl font-bold mb-2">{targetText}</p>
         <Button variant="ghost" size="sm" onClick={handlePlayAudio} className="gap-2">
-          <Volume2 className="w-4 h-4" />
-          Listen
+          {isPlaying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Volume2 className="w-4 h-4" />}
+          {isPlaying ? 'Playing…' : 'Listen'}
         </Button>
       </div>
 
-      {/* Live transcript */}
-      {isListening && transcript && (
+      {/* Status feedback */}
+      {isListening && (
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/20 rounded-lg text-center">
+          <p className="text-sm text-red-600 dark:text-red-400 animate-pulse">Recording… Speak now</p>
+        </div>
+      )}
+      {isTranscribing && !isListening && (
         <div className="mb-4 p-3 bg-muted rounded-lg text-center">
-          <p className="text-sm text-muted-foreground">You said:</p>
-          <p className="text-lg">{transcript}</p>
+          <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" /> Processing your speech…
+          </p>
         </div>
       )}
 
       {/* Mic button */}
       {!showResult && (
-        <div className="flex justify-center mb-4">
+        <div className="flex flex-col items-center mb-4">
           {isSupported ? (
-            <Button
-              onClick={handleToggleMic}
-              size="lg"
-              variant={isListening ? 'destructive' : 'default'}
-              className="rounded-full w-16 h-16"
-            >
-              {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-            </Button>
+            <>
+              <Button
+                onClick={handleToggleMic}
+                size="lg"
+                variant={isListening ? 'destructive' : 'default'}
+                className={cn('rounded-full w-16 h-16', isListening && 'animate-pulse')}
+                disabled={isTranscribing}
+              >
+                {isTranscribing ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : isListening ? (
+                  <Square className="w-5 h-5" />
+                ) : (
+                  <Mic className="w-6 h-6" />
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                {isTranscribing ? 'Processing…' : isListening ? 'Tap to stop' : 'Tap to speak'}
+              </p>
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">
               Speech recognition is not supported in your browser.

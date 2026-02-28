@@ -49,7 +49,7 @@ describe('useWhisperSTT', () => {
   });
 
   it('initializes with correct default state', async () => {
-    const { useWhisperSTT } = await import('../useWhisperSTT');
+    const { useWhisperSTT } = await import('@/hooks/useWhisperSTT');
     const { result } = renderHook(() => useWhisperSTT());
 
     expect(result.current.isListening).toBe(false);
@@ -58,7 +58,7 @@ describe('useWhisperSTT', () => {
   });
 
   it('initMic calls AudioManager.init()', async () => {
-    const { useWhisperSTT } = await import('../useWhisperSTT');
+    const { useWhisperSTT } = await import('@/hooks/useWhisperSTT');
     const { result } = renderHook(() => useWhisperSTT());
 
     let ok: boolean | undefined;
@@ -71,7 +71,7 @@ describe('useWhisperSTT', () => {
   });
 
   it('destroyMic calls AudioManager.destroy()', async () => {
-    const { useWhisperSTT } = await import('../useWhisperSTT');
+    const { useWhisperSTT } = await import('@/hooks/useWhisperSTT');
     const { result } = renderHook(() => useWhisperSTT());
 
     act(() => {
@@ -83,7 +83,7 @@ describe('useWhisperSTT', () => {
 
   it('startListening inits mic if idle and starts capture', async () => {
     mockGetState.mockReturnValue('idle');
-    const { useWhisperSTT } = await import('../useWhisperSTT');
+    const { useWhisperSTT } = await import('@/hooks/useWhisperSTT');
     const { result } = renderHook(() => useWhisperSTT());
 
     await act(async () => {
@@ -97,7 +97,7 @@ describe('useWhisperSTT', () => {
 
   it('startListening skips init if already ready', async () => {
     mockGetState.mockReturnValue('ready');
-    const { useWhisperSTT } = await import('../useWhisperSTT');
+    const { useWhisperSTT } = await import('@/hooks/useWhisperSTT');
     const { result } = renderHook(() => useWhisperSTT());
 
     await act(async () => {
@@ -123,7 +123,7 @@ describe('useWhisperSTT', () => {
    * 3. No SpeechRecognition API is used at all
    */
   it('does NOT use SpeechRecognition API (iOS 40s freeze regression)', async () => {
-    const { useWhisperSTT } = await import('../useWhisperSTT');
+    const { useWhisperSTT } = await import('@/hooks/useWhisperSTT');
     const { result } = renderHook(() => useWhisperSTT());
 
     // Init mic once
@@ -164,7 +164,7 @@ describe('useWhisperSTT', () => {
       json: () => Promise.resolve({ success: true, text: 'Hello world' }),
     });
 
-    const { useWhisperSTT } = await import('../useWhisperSTT');
+    const { useWhisperSTT } = await import('@/hooks/useWhisperSTT');
     const { result } = renderHook(() => useWhisperSTT());
 
     // Set up a large enough blob (>1000 bytes)
@@ -192,7 +192,7 @@ describe('useWhisperSTT', () => {
     // Blob smaller than 1000 bytes
     mockStopCapture.mockResolvedValueOnce(new Blob(['hi'], { type: 'audio/webm' }));
 
-    const { useWhisperSTT } = await import('../useWhisperSTT');
+    const { useWhisperSTT } = await import('@/hooks/useWhisperSTT');
     const { result } = renderHook(() => useWhisperSTT());
 
     act(() => {
@@ -207,7 +207,7 @@ describe('useWhisperSTT', () => {
   });
 
   it('resetTranscript clears both transcript and finalTranscript', async () => {
-    const { useWhisperSTT } = await import('../useWhisperSTT');
+    const { useWhisperSTT } = await import('@/hooks/useWhisperSTT');
     const { result } = renderHook(() => useWhisperSTT());
 
     act(() => {
