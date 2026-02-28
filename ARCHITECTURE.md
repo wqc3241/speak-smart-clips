@@ -48,10 +48,10 @@ src/
 │   ├── useVideoProcessing.ts  # Video extraction & AI processing pipeline
 │   ├── useLearningUnits.ts    # Fetch/update learning units from DB
 │   ├── useConversation.ts     # AI conversation state, STT/TTS integration
-│   ├── useWhisperSTT.ts       # OpenAI Whisper STT via AudioManager + edge function
-│   ├── useTextToSpeech.ts     # OpenAI TTS via edge function
-│   ├── useBrowserTTS.ts       # Browser native SpeechSynthesis
-│   ├── useSpeechRecognition.ts# Web Speech API wrapper (legacy, unused in conversation)
+│   ├── useWhisperSTT.ts       # OpenAI Whisper STT via AudioManager + edge function (used everywhere)
+│   ├── useTextToSpeech.ts     # OpenAI TTS via edge function (used in conversation + quiz)
+│   ├── useBrowserTTS.ts       # Browser native SpeechSynthesis (legacy, unused)
+│   ├── useSpeechRecognition.ts# Web Speech API wrapper (legacy, unreliable on iOS — do not use)
 │   ├── useYouTubeSearch.ts    # YouTube search via edge function
 │   ├── usePersonalizedRecommendations.ts # Personalized video recs with 24h per-user cache
 │   └── use-mobile.tsx         # Mobile breakpoint detection
@@ -63,13 +63,24 @@ src/
 │   └── youtube.ts             # YouTubeSearchResult, CuratedVideo
 │
 ├── lib/
-│   ├── audioManager.ts        # Singleton mic manager (getUserMedia soft-pause for iOS)
+│   ├── audioManager.ts        # Singleton mic manager (getUserMedia soft-pause for iOS, configurable silence detection)
 │   ├── constants.ts           # Test data, dev mode config
 │   ├── languageUtils.ts       # Language ↔ BCP-47 mapping, stop phrases
 │   ├── conversationStorage.ts # LocalStorage for conversation sessions
 │   ├── recommendedVideos.ts   # Curated video library
 │   ├── typeGuards.ts          # Runtime type validation
 │   └── validation.ts          # Zod schemas for auth forms
+│
+├── test/                      # Unified test directory
+│   ├── setup.ts               # Vitest setup (env stubs, jest-dom)
+│   ├── mocks/supabase.ts      # Shared Supabase mock
+│   ├── unit/
+│   │   ├── components/        # Component tests (ErrorBoundary)
+│   │   ├── hooks/             # Hook tests (useAuth, useWhisperSTT, useTTS, etc.)
+│   │   ├── lib/               # Library tests (audioManager, typeGuards)
+│   │   └── pages/             # Page tests (auth-redirect)
+│   ├── integration/           # E2E integration tests (userJourney)
+│   └── manual/                # Manual regression test cases (test-cases.md)
 │
 └── integrations/supabase/
     ├── client.ts              # Supabase client init
@@ -168,7 +179,7 @@ AI-generated quiz units per project.
 |----------|---------|----------|
 | analyze-content | Extract vocabulary & grammar from transcript (bilingual-aware, romanized→native script) | Gemini 3 Flash (via Lovable Gateway) |
 | generate-practice-sentences | Create practice sentences from extracted content | Gemini 3 Flash |
-| generate-learning-units | Generate 10-40 quiz units with 9 question types | Gemini 3 Flash |
+| generate-learning-units | Generate 10-40 quiz units with 9 question types (post-processing: sanitize garbled AI output, normalize type/key names) | Gemini 3 Flash |
 | conversation-chat | AI conversation partner in target language | Gemini 3 Flash |
 | conversation-summary | Evaluate conversation, generate feedback | Gemini 3 Flash |
 
@@ -283,7 +294,8 @@ processUserInput → conversation-chat (Gemini)
 useTextToSpeech → generate-speech (OpenAI TTS)
     │
     ▼  Audio blob → play via <audio> element
-On audio end → user can press voice button again (mic stream still alive)
+On audio end → refreshStream() (re-acquire mic after iOS audio session switch)
+    → user can press voice button again (mic stream alive with fresh track)
     │
     ▼  (loop continues — mic is never released mid-conversation)
 
@@ -291,10 +303,11 @@ On stop: conversation-summary → feedback + localStorage save
          AudioManager.destroy() — releases mic hardware (track.stop())
 ```
 
-**Key design choice:** The mic stream is acquired once and kept alive for the entire
-conversation session using "soft-pause" (`track.enabled` toggling) instead of
-`track.stop()`/`getUserMedia()` cycles. This avoids the ~40s iOS WebKit hardware lock
-that occurs when the media server re-acquires audio input after TTS playback.
+**Key design choices:**
+- The mic stream is acquired once and kept alive for the entire conversation session using "soft-pause" (`track.enabled` toggling) instead of `track.stop()`/`getUserMedia()` cycles. This avoids the ~40s iOS WebKit hardware lock that occurs when the media server re-acquires audio input after TTS playback.
+- After TTS playback on iOS, `AudioManager.refreshStream()` re-acquires the mic because iOS switches the hardware audio session to "playback" mode, silencing the existing stream.
+- Silence detection is configurable per context: Talk mode uses 1.5s silence / 8s no-speech timeout; Read After Me uses 2.5s / 15s for longer sentences.
+- `AudioContext.resume()` is awaited before AnalyserNode begins — required on iOS where AudioContext starts suspended.
 
 ### Authentication Flow
 
@@ -352,10 +365,10 @@ Manages current project state. Auto-saves to Supabase on project changes with in
 | tell_meaning | MultipleChoiceQ | Select meaning of a word (same component) |
 | translation | TranslationQ | Select correct translation |
 | fill_blank | FillBlankQ | Select word to fill the blank |
-| read_after_me | ReadAfterMeQ | Speak text aloud, fuzzy match ≥70% |
+| read_after_me | ReadAfterMeQ | Listen (OpenAI TTS), speak aloud (Whisper STT), fuzzy match ≥70% |
 | multiple_select | MultipleSelectQ | Select 2-3 correct from 4-6 options |
 | word_arrange | WordArrangeQ | Tap words to arrange in order |
-| listening | ListeningQ | Listen to TTS, select what was said |
+| listening | ListeningQ | Listen to OpenAI TTS, select what was said |
 | match_pairs | MatchPairsQ | Match 4-5 word↔meaning pairs |
 
 ---

@@ -219,9 +219,11 @@ Deleted `breaklingo.html`. `index.html` is the single source of truth.
 
 ---
 
-## Test Coverage Added (2026-02-27)
+## Test Coverage (consolidated 2026-02-28)
 
-### `src/hooks/__tests__/usePersonalizedRecommendations.test.ts` (new file — 8 tests)
+All tests live in `src/test/` (unified from scattered `__tests__` dirs):
+
+### `src/test/unit/hooks/usePersonalizedRecommendations.test.ts` (8 tests)
 - Returns empty when search history is empty (no API calls)
 - Fetches via youtube-search when no cache exists
 - Serves from cache without API calls when cache is fresh
@@ -231,7 +233,11 @@ Deleted `breaklingo.html`. `index.html` is the single source of truth.
 - Saves fetched results to localStorage cache
 - Uses only first 3 search history entries (MAX_QUERIES)
 
-### `src/hooks/__tests__/useVideoProcessing.test.ts` (extended — 7 new tests)
+### `src/test/unit/hooks/useVideoProcessing.test.ts` (11 tests)
+- Initializes with isProcessing false
+- Cleans up polling intervals on unmount
+- Extracts video IDs correctly
+- Provides cleanup function
 - `processVideo` signature has no `languageCode` param
 - Calls `get-available-languages` before `extract-transcript`
 - Prefers manual non-English captions over auto-generated
@@ -239,6 +245,53 @@ Deleted `breaklingo.html`. `index.html` is the single source of truth.
 - Falls back to auto mode when only English captions are available
 - Uses AI-detected language directly (no manual override)
 - Sets `detectedLanguage` to "Detecting..." for pending transcript jobs
+
+### `src/test/unit/hooks/useWhisperSTT.test.ts` (9 tests)
+- Initializes with correct default state
+- initMic calls AudioManager.init()
+- destroyMic calls AudioManager.destroy()
+- startListening inits mic if idle and starts capture
+- startListening skips init if already ready
+- Does NOT use SpeechRecognition API (iOS 40s freeze regression)
+- stopListening sends audio to Whisper and returns transcript
+- Skips transcription for very short audio
+- resetTranscript clears both transcript and finalTranscript
+
+### `src/test/unit/hooks/useAuth.test.ts` (4 tests)
+- Checks session on mount
+- Subscribes to auth changes and unsubscribes on unmount
+- Sets user and session when session exists
+- Does not auto-login when DEV_TEST_MODE is false
+
+### `src/test/unit/hooks/useTextToSpeech.test.ts` (3 tests)
+- Initializes with isPlaying false
+- Cleans up audio on unmount
+- Returns speak function
+
+### `src/test/unit/lib/audioManager.test.ts` (6 tests)
+- Starts in idle state
+- init() acquires mic via getUserMedia and transitions to ready
+- Never calls track.stop() during recording cycles (iOS soft-pause regression)
+- init() is idempotent — second call does not re-acquire mic
+- startCapture returns false when not ready
+- destroy() releases all resources and resets to idle
+- Can re-init after destroy
+
+### `src/test/unit/lib/typeGuards.test.ts` (14 tests)
+- isVocabularyArray, isGrammarArray, isPracticeSentenceArray, toJson
+
+### `src/test/unit/components/ErrorBoundary.test.tsx` (5 tests)
+- Renders children, error fallback, custom fallback, reset, componentDidCatch
+
+### `src/test/unit/pages/auth-redirect.test.ts` (3 tests)
+- OAuth redirect uses window.location.origin (not hardcoded)
+- Redirects correctly for production, ngrok, and localhost
+
+### `src/test/integration/userJourney.integration.test.tsx` (22 tests)
+- Full E2E user journey: registration → onboarding → video search → learning → conversation
+
+### `src/test/manual/test-cases.md` (12 manual regression test cases)
+- TC-001 through TC-012 covering all reported bugs from 2026-02-28 session
 
 ---
 
@@ -430,3 +483,70 @@ ReadAfterMeQ uses: `silenceDurationMs: 2500` (2.5s), `noSpeechTimeoutMs: 15000` 
 ### Key Lesson
 
 > Silence detection thresholds are context-dependent. A value that works for conversational turn-taking is too aggressive for read-aloud exercises. Make timing configurable at the hook level so each component can tune behavior for its use case.
+
+---
+
+## Test Consolidation — Unified Test Folder
+
+**Date**: 2026-02-28
+
+### Problem
+
+Tests were scattered across 5 `__tests__` directories co-located with source code:
+- `src/components/__tests__/`
+- `src/hooks/__tests__/`
+- `src/lib/__tests__/`
+- `src/pages/__tests__/`
+- `src/test/__tests__/`
+
+Manual test cases lived in `tasks/test-cases.md`, separate from the test code.
+
+### Solution
+
+Consolidated everything into `src/test/`:
+```
+src/test/
+  setup.ts                    # Vitest setup
+  mocks/supabase.ts           # Shared mock
+  unit/
+    components/               # Component tests
+    hooks/                    # Hook tests
+    lib/                      # Library tests
+    pages/                    # Page tests
+  integration/                # E2E integration tests
+  manual/                     # Manual regression test cases (markdown)
+```
+
+Updated all relative imports (`../useAuth`) to aliased imports (`@/hooks/useAuth`) so tests work regardless of their location in the tree.
+
+### Key Lesson
+
+> When consolidating tests, use `@/` aliased imports instead of relative paths. This makes tests location-independent — they can be moved without updating import paths. The `@` alias is already configured in `vitest.config.ts` via the `resolve.alias` setting.
+
+---
+
+## Session Summary — 2026-02-28
+
+### All Changes Made This Session
+
+| File | Change |
+|------|--------|
+| `src/lib/audioManager.ts` | Track health check in startCapture; refreshStream() for iOS TTS fix; await AudioContext.resume() in silence detection; configurable silenceDurationMs/noSpeechTimeoutMs; sourceNode cleanup; stopCapture try-catch guard; 60s max recording timer; 8s no-speech fallback |
+| `src/hooks/useWhisperSTT.ts` | Re-init mic on dead track; "Didn't catch that" feedback; refreshMic export; pass-through silence timing options |
+| `src/hooks/useConversation.ts` | Call whisperRefreshMic() after TTS ends (iOS audio session fix) |
+| `src/components/features/learning/questions/ReadAfterMeQ.tsx` | Switched from useSpeechRecognition to useWhisperSTT; replaced native TTS with OpenAI TTS; new mic icon states (Mic/Square/Loader2); status text labels; configurable silence timing (2.5s/15s) |
+| `src/components/features/learning/questions/ListeningQ.tsx` | Replaced native TTS with OpenAI TTS; loading spinner on play button |
+| `supabase/functions/generate-learning-units/index.ts` | sanitizeOptionText() for JSON artifact cleanup; garbled-option detection filter; match_pair→match_pairs normalization; pair→pairs key normalization; max_tokens 16000→32000 |
+| `tasks/lessons.md` | Added 8 new lessons from this session |
+| `src/test/manual/test-cases.md` | Created 12 manual regression test cases |
+| `src/test/unit/**`, `src/test/integration/**` | Consolidated all tests from scattered __tests__ dirs; updated imports to @/ aliases |
+| Deleted: `src/components/__tests__/`, `src/hooks/__tests__/`, `src/lib/__tests__/`, `src/pages/__tests__/`, `src/test/__tests__/` | Removed old scattered test directories |
+
+### Database Fixes (via Supabase Management API)
+- Cleaned "interim" artifacts from quiz options/questions across 3 learning units
+- Fixed "word:" suffix artifacts in match_pairs meanings across 28 units
+- Fixed `type: "match_pair"` → `"match_pairs"` and `"pair"` → `"pairs"` key in 27 questions
+
+### Deployments
+- `generate-learning-units` edge function deployed to Supabase
+- All changes committed and pushed to `origin/main`
