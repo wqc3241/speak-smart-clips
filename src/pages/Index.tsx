@@ -29,7 +29,7 @@ const Index = () => {
 
   useEffect(() => {
     if (!isCheckingAuth && !user) {
-      navigate("/auth", { replace: true });
+      navigate("/auth", { replace: true, state: { from: "/dashboard" } });
     }
   }, [isCheckingAuth, user, navigate]);
 

@@ -147,7 +147,7 @@ serve(async (req) => {
         const combinedAudio = concatAudioBuffers(audioBuffers);
         console.log(`Generated ${combinedAudio.length} bytes of audio`);
 
-        return new Response(combinedAudio, {
+        return new Response(combinedAudio.buffer as ArrayBuffer, {
             headers: {
                 ...corsHeaders,
                 'Content-Type': 'audio/mpeg',
