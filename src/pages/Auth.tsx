@@ -19,7 +19,7 @@ const Auth = () => {
     // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/", { replace: true });
+        navigate("/dashboard", { replace: true });
       }
     });
 
@@ -30,7 +30,7 @@ const Auth = () => {
       if (event === "PASSWORD_RECOVERY") {
         setIsResettingPassword(true);
       } else if (event === "SIGNED_IN") {
-        navigate("/");
+        navigate("/dashboard");
       }
     });
 
@@ -38,7 +38,7 @@ const Auth = () => {
   }, [navigate]);
 
   const handleGoogleSignIn = async () => {
-    const redirectTo = `${window.location.origin}/`;
+    const redirectTo = `${window.location.origin}/dashboard`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {

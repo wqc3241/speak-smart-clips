@@ -16,55 +16,55 @@ export type Database = {
     Tables: {
       learning_units: {
         Row: {
-          id: string
-          project_id: string
-          user_id: string
-          unit_number: number
-          title: string
+          attempts: number | null
+          best_score: number | null
+          created_at: string | null
           description: string | null
           difficulty: string
-          questions: Json
-          question_count: number | null
+          id: string
           is_completed: boolean | null
-          best_score: number | null
-          attempts: number | null
-          stars: number | null
           last_attempted_at: string | null
-          created_at: string | null
+          project_id: string
+          question_count: number | null
+          questions: Json
+          stars: number | null
+          title: string
+          unit_number: number
+          user_id: string
         }
         Insert: {
-          id?: string
-          project_id: string
-          user_id: string
-          unit_number: number
-          title: string
+          attempts?: number | null
+          best_score?: number | null
+          created_at?: string | null
           description?: string | null
           difficulty?: string
-          questions?: Json
-          question_count?: number | null
+          id?: string
           is_completed?: boolean | null
-          best_score?: number | null
-          attempts?: number | null
-          stars?: number | null
           last_attempted_at?: string | null
-          created_at?: string | null
+          project_id: string
+          question_count?: number | null
+          questions?: Json
+          stars?: number | null
+          title: string
+          unit_number: number
+          user_id: string
         }
         Update: {
-          id?: string
-          project_id?: string
-          user_id?: string
-          unit_number?: number
-          title?: string
+          attempts?: number | null
+          best_score?: number | null
+          created_at?: string | null
           description?: string | null
           difficulty?: string
-          questions?: Json
-          question_count?: number | null
+          id?: string
           is_completed?: boolean | null
-          best_score?: number | null
-          attempts?: number | null
-          stars?: number | null
           last_attempted_at?: string | null
-          created_at?: string | null
+          project_id?: string
+          question_count?: number | null
+          questions?: Json
+          stars?: number | null
+          title?: string
+          unit_number?: number
+          user_id?: string
         }
         Relationships: [
           {
@@ -168,46 +168,49 @@ export type Database = {
       }
       user_feedback: {
         Row: {
-          id: string
-          user_id: string | null
-          user_email: string | null
-          category: string | null
-          message: string
+          category: string
           created_at: string | null
+          id: string
+          message: string
+          user_email: string | null
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id?: string | null
-          user_email?: string | null
-          category?: string | null
-          message: string
+          category?: string
           created_at?: string | null
+          id?: string
+          message: string
+          user_email?: string | null
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string | null
-          user_email?: string | null
-          category?: string | null
-          message?: string
+          category?: string
           created_at?: string | null
+          id?: string
+          message?: string
+          user_email?: string | null
+          user_id?: string
         }
         Relationships: []
       }
       user_profiles: {
         Row: {
+          created_at: string | null
+          first_login_at: string | null
           id: string
           welcome_email_sent: boolean | null
-          first_login_at: string | null
         }
         Insert: {
+          created_at?: string | null
+          first_login_at?: string | null
           id: string
           welcome_email_sent?: boolean | null
-          first_login_at?: string | null
         }
         Update: {
+          created_at?: string | null
+          first_login_at?: string | null
           id?: string
           welcome_email_sent?: boolean | null
-          first_login_at?: string | null
         }
         Relationships: []
       }

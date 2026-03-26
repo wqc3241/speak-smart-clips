@@ -27,7 +27,7 @@ export const useAuth = () => {
           setIsCheckingAuth(false);
         }
         // Trigger welcome email on sign-up or first sign-in
-        if (session && (event === 'SIGNED_IN' || event === 'SIGNED_UP')) {
+        if (session && event === 'SIGNED_IN') {
           supabase.functions.invoke('send-welcome-email').catch((err) => {
             console.error('Welcome email error:', err);
           });
@@ -139,7 +139,7 @@ export const useAuth = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.href = '/auth';
+    window.location.href = '/';
   };
 
   return {
